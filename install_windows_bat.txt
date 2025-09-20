@@ -1,0 +1,81 @@
+@echo off
+echo.
+echo ====================================
+echo    MEDSTOCK360 - INSTALACAO AUTOMATICA
+echo ====================================
+echo.
+echo Instalando o sistema hospitalar...
+echo.
+
+REM Verificar se Python está instalado
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] Python nao encontrado!
+    echo.
+    echo Por favor, instale o Python de https://python.org/downloads
+    echo IMPORTANTE: Marque "Add Python to PATH" durante a instalacao
+    echo.
+    pause
+    exit /b 1
+)
+
+echo [OK] Python encontrado!
+echo.
+
+REM Atualizar pip
+echo Atualizando pip...
+python -m pip install --upgrade pip
+
+REM Instalar dependências
+echo.
+echo Instalando dependencias do sistema...
+echo.
+
+pip install streamlit
+if errorlevel 1 (
+    echo [ERRO] Falha ao instalar Streamlit
+    pause
+    exit /b 1
+)
+
+pip install pandas
+if errorlevel 1 (
+    echo [ERRO] Falha ao instalar Pandas
+    pause
+    exit /b 1
+)
+
+pip install plotly
+if errorlevel 1 (
+    echo [ERRO] Falha ao instalar Plotly
+    pause
+    exit /b 1
+)
+
+pip install sqlite3
+pip install python-dateutil
+pip install pytz
+
+REM Criar diretórios necessários
+echo.
+echo Criando estrutura de diretorios...
+if not exist "data" mkdir data
+if not exist "logs" mkdir logs
+if not exist "backups" mkdir backups
+
+echo.
+echo ====================================
+echo    INSTALACAO CONCLUIDA COM SUCESSO!
+echo ====================================
+echo.
+echo Para executar o sistema, clique duplo em:
+echo EXECUTAR_WINDOWS.bat
+echo.
+echo Ou execute manualmente:
+echo streamlit run app.py
+echo.
+echo Primeiro acesso:
+echo Usuario: admin
+echo Senha: admin123
+echo.
+pause
