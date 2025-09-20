@@ -1,0 +1,52 @@
+# MedStock360 - Sistema Hospitalar Completo
+# Versão: 3.0 Advanced Cloud Edition
+
+# Framework Web Principal
+streamlit>=1.28.0
+
+# Análise e Manipulação de Dados
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualização e Gráficos
+plotly>=5.15.0
+
+# Banco de Dados (built-in no Python)
+# sqlite3 - já incluído no Python
+
+# Utilitários de Data e Tempo
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Matemática e Estatística (para análise preditiva)
+scikit-learn>=1.3.0
+
+# Segurança e Criptografia
+hashlib
+uuid
+
+# Sistema e Arquivos
+pathlib
+json
+time
+re
+
+# Interface e Formatação
+datetime
+warnings
+
+# Opcional: Para relatórios em PDF (descomente se necessário)
+# reportlab>=4.0.0
+# openpyxl>=3.1.0
+
+# Opcional: Para envio de emails (descomente se necessário)  
+# smtplib
+# email
+
+# Opcional: Para desenvolvimento e testes (descomente se necessário)
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+
+# Opcional: Para formatação de código (descomente se necessário)
+# black>=23.7.0
+# isort>=5.12.0
