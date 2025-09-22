@@ -73,23 +73,43 @@ st.markdown("""
         border-radius: 5px;
         margin: 1rem 0;
     }
+    .medication-card {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        border-left: 4px solid #007bff;
+    }
+    .medication-location {
+        background: #e3f2fd;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
+        color: #1976d2;
+    }
+    .ai-analysis {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        margin: 1rem 0;
+    }
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    }
 </style>
 """, unsafe_allow_html=True)
 
+# Classe para gerenciar banco de dados
 class DatabaseManager:
-    """Gerenciador de banco de dados"""
-    
-    def __init__(self):
-        self.db_path = "data/medstock360.db"
-        Path("data").mkdir(exist_ok=True)
+    def __init__(self, db_path="medstock360.db"):
+        self.db_path = db_path
         self.init_database()
     
     def get_connection(self):
-        """Obter conexão com o banco"""
         return sqlite3.connect(self.db_path)
     
     def init_database(self):
-        """Inicializar tabelas do banco de dados"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -101,13 +121,14 @@ class DatabaseManager:
                 password_hash TEXT NOT NULL,
                 nome_completo TEXT NOT NULL,
                 email TEXT,
-                perfil TEXT NOT NULL,
-                crm_crf TEXT,
-                ativo INTEGER DEFAULT 1,
+                perfil TEXT NOT NULL DEFAULT 'operador',
+                crm TEXT,
+                especialidade TEXT,
+                telefone TEXT,
+                ativo BOOLEAN DEFAULT 1,
                 data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ultimo_login TIMESTAMP,
-                criado_por INTEGER,
-                FOREIGN KEY (criado_por) REFERENCES usuarios (id)
+                ultimo_acesso TIMESTAMP,
+                permissoes TEXT DEFAULT '{}'
             )
         """)
         
@@ -117,16 +138,19 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome TEXT NOT NULL,
                 principio_ativo TEXT,
-                fabricante TEXT,
                 categoria TEXT,
-                apresentacao TEXT,
+                tipo TEXT,
                 concentracao TEXT,
-                registro_anvisa TEXT,
-                controlado INTEGER DEFAULT 0,
-                temperatura_armazenamento TEXT,
+                forma_farmaceutica TEXT,
                 via_administracao TEXT,
+                controlado BOOLEAN DEFAULT 0,
+                refrigerado BOOLEAN DEFAULT 0,
+                prescricao_obrigatoria BOOLEAN DEFAULT 0,
+                tarja TEXT,
+                codigo_barras TEXT,
+                fabricante TEXT,
                 observacoes TEXT,
-                ativo INTEGER DEFAULT 1,
+                ativo BOOLEAN DEFAULT 1,
                 data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 cadastrado_por INTEGER,
                 FOREIGN KEY (cadastrado_por) REFERENCES usuarios (id)
@@ -146,12 +170,31 @@ class DatabaseManager:
                 preco_unitario REAL,
                 fornecedor TEXT,
                 local_armazenamento TEXT,
+                setor TEXT,
+                prateleira TEXT,
+                posicao TEXT,
                 observacoes TEXT,
-                ativo INTEGER DEFAULT 1,
-                data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ativo BOOLEAN DEFAULT 1,
                 responsavel_entrada INTEGER,
+                data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (medicamento_id) REFERENCES medicamentos (id),
                 FOREIGN KEY (responsavel_entrada) REFERENCES usuarios (id)
+            )
+        """)
+        
+        # Tabela de movimentações
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS movimentacoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lote_id INTEGER NOT NULL,
+                tipo_movimento TEXT NOT NULL,
+                quantidade INTEGER NOT NULL,
+                motivo TEXT,
+                observacoes TEXT,
+                responsavel INTEGER NOT NULL,
+                data_movimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (lote_id) REFERENCES lotes (id),
+                FOREIGN KEY (responsavel) REFERENCES usuarios (id)
             )
         """)
         
@@ -168,13 +211,15 @@ class DatabaseManager:
                 email TEXT,
                 endereco TEXT,
                 cidade TEXT,
-                estado TEXT,
                 cep TEXT,
                 plano_saude TEXT,
-                numero_carteirinha TEXT,
+                numero_carteira TEXT,
                 contato_emergencia TEXT,
+                alergias TEXT,
+                medicamentos_uso_continuo TEXT,
+                historico_familiar TEXT,
                 observacoes TEXT,
-                ativo INTEGER DEFAULT 1,
+                ativo BOOLEAN DEFAULT 1,
                 data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 cadastrado_por INTEGER,
                 FOREIGN KEY (cadastrado_por) REFERENCES usuarios (id)
@@ -187,18 +232,16 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 paciente_id INTEGER NOT NULL,
                 medico_id INTEGER NOT NULL,
-                data_consulta TIMESTAMP NOT NULL,
-                tipo_consulta TEXT,
+                data_consulta DATETIME NOT NULL,
                 motivo TEXT,
+                sintomas TEXT,
                 diagnostico TEXT,
                 observacoes TEXT,
-                status TEXT DEFAULT 'Agendada',
                 valor REAL,
-                data_agendamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                agendado_por INTEGER,
+                status TEXT DEFAULT 'agendada',
+                data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (paciente_id) REFERENCES pacientes (id),
-                FOREIGN KEY (medico_id) REFERENCES usuarios (id),
-                FOREIGN KEY (agendado_por) REFERENCES usuarios (id)
+                FOREIGN KEY (medico_id) REFERENCES usuarios (id)
             )
         """)
         
@@ -206,15 +249,17 @@ class DatabaseManager:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS receitas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                consulta_id INTEGER,
                 paciente_id INTEGER NOT NULL,
                 medico_id INTEGER NOT NULL,
-                data_emissao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                consulta_id INTEGER,
+                data_receita DATETIME NOT NULL,
                 observacoes TEXT,
-                status TEXT DEFAULT 'Ativa',
-                FOREIGN KEY (consulta_id) REFERENCES consultas (id),
+                validade_receita DATE,
+                status TEXT DEFAULT 'ativa',
+                data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (paciente_id) REFERENCES pacientes (id),
-                FOREIGN KEY (medico_id) REFERENCES usuarios (id)
+                FOREIGN KEY (medico_id) REFERENCES usuarios (id),
+                FOREIGN KEY (consulta_id) REFERENCES consultas (id)
             )
         """)
         
@@ -224,152 +269,140 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 receita_id INTEGER NOT NULL,
                 medicamento_id INTEGER NOT NULL,
-                dosagem TEXT NOT NULL,
                 quantidade INTEGER NOT NULL,
-                frequencia TEXT NOT NULL,
-                duracao_tratamento TEXT,
-                instrucoes_uso TEXT,
+                posologia TEXT,
+                observacoes TEXT,
                 FOREIGN KEY (receita_id) REFERENCES receitas (id),
                 FOREIGN KEY (medicamento_id) REFERENCES medicamentos (id)
             )
         """)
         
-        # Tabela de movimentações de estoque
+        # Tabela de dispensações
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS movimentacoes (
+            CREATE TABLE IF NOT EXISTS dispensacoes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                receita_id INTEGER NOT NULL,
                 lote_id INTEGER NOT NULL,
-                tipo_movimento TEXT NOT NULL,
-                quantidade INTEGER NOT NULL,
-                motivo TEXT,
-                receita_id INTEGER,
-                data_movimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                quantidade_dispensada INTEGER NOT NULL,
+                data_dispensacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 responsavel INTEGER NOT NULL,
                 observacoes TEXT,
-                FOREIGN KEY (lote_id) REFERENCES lotes (id),
                 FOREIGN KEY (receita_id) REFERENCES receitas (id),
+                FOREIGN KEY (lote_id) REFERENCES lotes (id),
                 FOREIGN KEY (responsavel) REFERENCES usuarios (id)
+            )
+        """)
+        
+        # Tabela de prontuário
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prontuario (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paciente_id INTEGER NOT NULL,
+                consulta_id INTEGER,
+                data_entrada DATETIME NOT NULL,
+                tipo_entrada TEXT NOT NULL,
+                descricao TEXT NOT NULL,
+                medico_responsavel INTEGER,
+                anexos TEXT,
+                data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (paciente_id) REFERENCES pacientes (id),
+                FOREIGN KEY (consulta_id) REFERENCES consultas (id),
+                FOREIGN KEY (medico_responsavel) REFERENCES usuarios (id)
+            )
+        """)
+        
+        # Tabela de alertas inteligentes
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS alertas_inteligentes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo_alerta TEXT NOT NULL,
+                prioridade TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                mensagem TEXT NOT NULL,
+                paciente_id INTEGER,
+                medicamento_id INTEGER,
+                usuario_destinatario INTEGER,
+                lido BOOLEAN DEFAULT 0,
+                data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                data_leitura TIMESTAMP,
+                FOREIGN KEY (paciente_id) REFERENCES pacientes (id),
+                FOREIGN KEY (medicamento_id) REFERENCES medicamentos (id),
+                FOREIGN KEY (usuario_destinatario) REFERENCES usuarios (id)
             )
         """)
         
         conn.commit()
         conn.close()
         
-        # Criar usuário administrador padrão
+        # Criar usuário admin se não existir
         self.create_default_admin()
     
     def create_default_admin(self):
-        """Criar usuário administrador padrão"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Verificar se já existe um admin
-        cursor.execute("SELECT id FROM usuarios WHERE perfil = 'Administrador'")
-        if not cursor.fetchone():
-            password_hash = hashlib.sha256("admin123".encode()).hexdigest()
+        # Verificar se já existe admin
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE perfil = 'admin'")
+        admin_count = cursor.fetchone()[0]
+        
+        if admin_count == 0:
+            # Criar usuário admin padrão
+            admin_password = hashlib.sha256("admin123".encode()).hexdigest()
+            
             cursor.execute("""
-                INSERT INTO usuarios (username, password_hash, nome_completo, perfil)
-                VALUES ('admin', ?, 'Administrador do Sistema', 'Administrador')
-            """, (password_hash,))
+                INSERT INTO usuarios (username, password_hash, nome_completo, perfil, permissoes)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                "admin", admin_password, "Administrador do Sistema", "admin",
+                json.dumps({"medicamentos": ["visualizar", "criar", "editar", "excluir"],
+                           "estoque": ["visualizar", "criar", "editar"],
+                           "pacientes": ["visualizar", "criar", "editar"],
+                           "consultas": ["visualizar", "criar", "editar"],
+                           "receitas": ["visualizar", "criar", "editar"],
+                           "relatorios": ["visualizar", "gerar"],
+                           "usuarios": ["visualizar", "criar", "editar", "excluir"]})
+            ))
+            
             conn.commit()
         
         conn.close()
 
-class AuthManager:
-    """Gerenciador de autenticação"""
+# Funções de autenticação
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, hashed):
+    return hash_password(password) == hashed
+
+def login_user(username, password):
+    conn = st.session_state.db_manager.get_connection()
+    cursor = conn.cursor()
     
-    def __init__(self, db_manager):
-        self.db = db_manager
+    cursor.execute("""
+        SELECT id, username, password_hash, nome_completo, perfil, permissoes, email
+        FROM usuarios 
+        WHERE username = ? AND ativo = 1
+    """, (username,))
     
-    def hash_password(self, password):
-        """Criar hash da senha"""
-        return hashlib.sha256(password.encode()).hexdigest()
+    user = cursor.fetchone()
+    conn.close()
     
-    def verify_password(self, password, password_hash):
-        """Verificar senha"""
-        return self.hash_password(password) == password_hash
-    
-    def authenticate(self, username, password):
-        """Autenticar usuário"""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT id, username, password_hash, nome_completo, perfil, ativo
-            FROM usuarios WHERE username = ? AND ativo = 1
-        """, (username,))
-        
-        user = cursor.fetchone()
-        conn.close()
-        
-        if user and self.verify_password(password, user[2]):
-            return {
-                'id': user[0],
-                'username': user[1],
-                'nome_completo': user[3],
-                'perfil': user[4]
-            }
-        return None
-    
-    def get_user_permissions(self, perfil):
-        """Obter permissões do usuário"""
-        permissions = {
-            'Administrador': {
-                'usuarios': ['criar', 'editar', 'visualizar', 'excluir'],
-                'medicamentos': ['criar', 'editar', 'visualizar', 'excluir'],
-                'estoque': ['criar', 'editar', 'visualizar', 'excluir'],
-                'pacientes': ['criar', 'editar', 'visualizar', 'excluir'],
-                'consultas': ['criar', 'editar', 'visualizar', 'excluir'],
-                'receitas': ['criar', 'editar', 'visualizar', 'excluir'],
-                'relatorios': ['visualizar', 'exportar']
-            },
-            'Farmacêutico': {
-                'medicamentos': ['criar', 'editar', 'visualizar'],
-                'estoque': ['criar', 'editar', 'visualizar'],
-                'receitas': ['visualizar', 'dispensar'],
-                'pacientes': ['visualizar'],
-                'relatorios': ['visualizar']
-            },
-            'Médico': {
-                'pacientes': ['criar', 'editar', 'visualizar'],
-                'consultas': ['criar', 'editar', 'visualizar'],
-                'receitas': ['criar', 'editar', 'visualizar'],
-                'medicamentos': ['visualizar'],
-                'relatorios': ['visualizar']
-            },
-            'Enfermeiro': {
-                'pacientes': ['visualizar', 'editar'],
-                'consultas': ['visualizar'],
-                'medicamentos': ['visualizar'],
-                'estoque': ['visualizar'],
-                'receitas': ['visualizar']
-            }
+    if user and verify_password(password, user[2]):
+        return {
+            'id': user[0],
+            'username': user[1],
+            'nome_completo': user[3],
+            'perfil': user[4],
+            'permissoes': json.loads(user[5] if user[5] else '{}'),
+            'email': user[6]
         }
-        return permissions.get(perfil, {})
+    return None
 
-def main():
-    """Função principal da aplicação"""
-    
-    # Inicializar gerenciadores
-    if 'db_manager' not in st.session_state:
-        st.session_state.db_manager = DatabaseManager()
-        st.session_state.auth_manager = AuthManager(st.session_state.db_manager)
-    
-    # Verificar autenticação
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    
-    if not st.session_state.authenticated:
-        show_login_page()
-    else:
-        show_main_app()
-
-def show_login_page():
-    """Página de login"""
+def show_login():
     st.markdown("""
     <div class="main-header">
         <h1>🏥 MedStock360 Advanced</h1>
-        <p>Sistema Hospitalar Completo Multi-usuário</p>
+        <p>Sistema Hospitalar Completo - Gestão Inteligente de Medicamentos</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -382,68 +415,80 @@ def show_login_page():
             username = st.text_input("👤 Usuário", placeholder="Digite seu usuário")
             password = st.text_input("🔒 Senha", type="password", placeholder="Digite sua senha")
             
-            submitted = st.form_submit_button("🚀 Entrar", use_container_width=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                login_button = st.form_submit_button("🚀 Entrar", use_container_width=True)
+            with col2:
+                demo_button = st.form_submit_button("📋 Acesso Demo", use_container_width=True)
             
-            if submitted:
-                if not username or not password:
-                    st.error("❌ Por favor, preencha todos os campos!")
-                else:
-                    user = st.session_state.auth_manager.authenticate(username, password)
+            if login_button:
+                if username and password:
+                    user = login_user(username, password)
                     if user:
-                        st.session_state.authenticated = True
                         st.session_state.user = user
-                        st.session_state.permissions = st.session_state.auth_manager.get_user_permissions(user['perfil'])
-                        st.success(f"✅ Bem-vindo, {user['nome_completo']}!")
+                        st.session_state.logged_in = True
+                        st.session_state.permissions = user['permissoes']
+                        
+                        # Atualizar último acesso
+                        conn = st.session_state.db_manager.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "UPDATE usuarios SET ultimo_acesso = CURRENT_TIMESTAMP WHERE id = ?",
+                            (user['id'],)
+                        )
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success("✅ Login realizado com sucesso!")
                         time.sleep(1)
                         st.rerun()
                     else:
                         st.error("❌ Usuário ou senha incorretos!")
+                else:
+                    st.error("❌ Preencha todos os campos!")
+            
+            if demo_button:
+                # Login como admin para demonstração
+                demo_user = login_user("admin", "admin123")
+                if demo_user:
+                    st.session_state.user = demo_user
+                    st.session_state.logged_in = True
+                    st.session_state.permissions = demo_user['permissoes']
+                    st.success("✅ Acesso demo ativado!")
+                    time.sleep(1)
+                    st.rerun()
         
         st.markdown("---")
-        st.info("""
-        **Usuário Padrão:**
-        - Usuário: `admin`
-        - Senha: `admin123`
+        st.markdown("""
+        **🔑 Acesso Demo:**
+        - **Usuário:** admin
+        - **Senha:** admin123
+        
+        **📊 Funcionalidades:**
+        - Controle de estoque inteligente
+        - Análise preditiva com IA
+        - Gestão de pacientes
+        - Receitas médicas
+        - Relatórios avançados
         """)
 
-def show_main_app():
-    """Aplicação principal"""
-    
-    # Header com informações do usuário
-    st.markdown(f"""
-    <div class="main-header">
-        <h1>🏥 MedStock360 Advanced</h1>
-        <p>Sistema Hospitalar Completo Multi-usuário - v3.0</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Informações do usuário logado
-    user_info_col1, user_info_col2, user_info_col3 = st.columns([2, 1, 1])
-    
-    with user_info_col1:
+def show_sidebar():
+    with st.sidebar:
         st.markdown(f"""
         <div class="user-info">
-            👤 <strong>{st.session_state.user['nome_completo']}</strong> | 
-            🎭 {st.session_state.user['perfil']} | 
+            👤 <strong>{st.session_state.user['nome_completo']}</strong><br>
+            🔧 {st.session_state.user['perfil'].title()}<br>
             📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}
         </div>
         """, unsafe_allow_html=True)
-    
-    with user_info_col3:
-        if st.button("🚪 Sair", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.user = None
-            st.session_state.permissions = None
-            st.rerun()
-    
-    # Menu lateral
-    with st.sidebar:
-        st.markdown("### 📋 Menu Principal")
         
-        # Opções baseadas nas permissões do usuário
+        st.markdown("### 🗂️ Menu Principal")
+        
+        # Menu baseado em permissões
         menu_options = []
         
         if 'medicamentos' in st.session_state.permissions:
+            menu_options.append("📊 Dashboard")
             menu_options.append("💊 Medicamentos")
         
         if 'estoque' in st.session_state.permissions:
@@ -453,124 +498,126 @@ def show_main_app():
             menu_options.append("👥 Pacientes")
         
         if 'consultas' in st.session_state.permissions:
-            menu_options.append("📅 Consultas")
+            menu_options.append("🏥 Consultas")
         
         if 'receitas' in st.session_state.permissions:
-            menu_options.append("📝 Receitas")
+            menu_options.append("📋 Receitas")
+        
+        menu_options.append("🔮 Análise Preditiva")
+        
+        if 'relatorios' in st.session_state.permissions:
+            menu_options.append("📈 Relatórios")
         
         if 'usuarios' in st.session_state.permissions:
             menu_options.append("👤 Usuários")
         
-        if 'relatorios' in st.session_state.permissions:
-            menu_options.append("📊 Relatórios")
+        menu_options.append("⚙️ Configurações")
         
-        # Dashboard sempre disponível
-        menu_options.insert(0, "🏠 Dashboard")
+        selected = st.selectbox("Escolha uma opção:", menu_options, key="main_menu")
         
-        selected_menu = st.selectbox("Selecione uma opção:", menu_options)
+        st.markdown("---")
+        
+        # Alertas rápidos
+        show_quick_alerts()
+        
+        st.markdown("---")
+        
+        if st.button("🚪 Sair", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+        
+        return selected
+
+def show_quick_alerts():
+    st.markdown("### ⚠️ Alertas Rápidos")
     
-    # Roteamento das páginas
-    if selected_menu == "🏠 Dashboard":
-        show_dashboard()
-    elif selected_menu == "💊 Medicamentos":
-        show_medicamentos()
-    elif selected_menu == "📦 Estoque":
-        show_estoque()
-    elif selected_menu == "👥 Pacientes":
-        show_pacientes()
-    elif selected_menu == "📅 Consultas":
-        show_consultas()
-    elif selected_menu == "📝 Receitas":
-        show_receitas()
-    elif selected_menu == "👤 Usuários":
-        show_usuarios()
-    elif selected_menu == "📊 Relatórios":
-        show_relatorios()
+    conn = st.session_state.db_manager.get_connection()
+    
+    # Medicamentos próximos ao vencimento
+    query_vencimento = """
+        SELECT COUNT(*) FROM lotes l
+        JOIN medicamentos m ON l.medicamento_id = m.id
+        WHERE l.ativo = 1 AND DATE(l.data_validade) <= DATE('now', '+30 days')
+        AND l.quantidade_atual > 0
+    """
+    
+    # Medicamentos com estoque baixo
+    query_estoque_baixo = """
+        SELECT COUNT(*) FROM lotes l
+        JOIN medicamentos m ON l.medicamento_id = m.id
+        WHERE l.ativo = 1 AND l.quantidade_atual > 0 AND l.quantidade_atual <= 10
+    """
+    
+    # Medicamentos sem estoque
+    query_sem_estoque = """
+        SELECT COUNT(*) FROM lotes l
+        JOIN medicamentos m ON l.medicamento_id = m.id
+        WHERE l.ativo = 1 AND l.quantidade_atual = 0
+    """
+    
+    vencimento = pd.read_sql(query_vencimento, conn).iloc[0, 0]
+    estoque_baixo = pd.read_sql(query_estoque_baixo, conn).iloc[0, 0]
+    sem_estoque = pd.read_sql(query_sem_estoque, conn).iloc[0, 0]
+    
+    conn.close()
+    
+    if vencimento > 0:
+        st.warning(f"⚠️ {vencimento} próximos ao vencimento")
+    
+    if estoque_baixo > 0:
+        st.warning(f"📦 {estoque_baixo} com estoque baixo")
+    
+    if sem_estoque > 0:
+        st.error(f"🔴 {sem_estoque} sem estoque")
+    
+    if vencimento == 0 and estoque_baixo == 0 and sem_estoque == 0:
+        st.success("✅ Tudo OK!")
 
 def show_dashboard():
-    """Dashboard principal"""
-    st.markdown("## 🏠 Dashboard")
+    st.markdown("""
+    <div class="main-header">
+        <h1>📊 Dashboard MedStock360</h1>
+        <p>Visão geral inteligente do sistema</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    conn = st.session_state.db_manager.get_connection()
     
     # Métricas principais
     col1, col2, col3, col4 = st.columns(4)
     
-    conn = st.session_state.db_manager.get_connection()
-    
     # Total de medicamentos
-    total_medicamentos = pd.read_sql("SELECT COUNT(*) as count FROM medicamentos WHERE ativo = 1", conn).iloc[0]['count']
+    total_medicamentos = pd.read_sql("SELECT COUNT(*) FROM medicamentos WHERE ativo = 1", conn).iloc[0, 0]
+    
+    # Total de lotes ativos
+    total_lotes = pd.read_sql("SELECT COUNT(*) FROM lotes WHERE ativo = 1", conn).iloc[0, 0]
     
     # Total de pacientes
-    total_pacientes = pd.read_sql("SELECT COUNT(*) as count FROM pacientes WHERE ativo = 1", conn).iloc[0]['count']
+    total_pacientes = pd.read_sql("SELECT COUNT(*) FROM pacientes WHERE ativo = 1", conn).iloc[0, 0]
     
-    # Consultas hoje
-    hoje = date.today()
-    consultas_hoje = pd.read_sql("""
-        SELECT COUNT(*) as count FROM consultas 
-        WHERE DATE(data_consulta) = ? AND status != 'Cancelada'
-    """, conn, params=[hoje]).iloc[0]['count']
-    
-    # Medicamentos próximos ao vencimento (30 dias)
-    vencimento_proximo = pd.read_sql("""
-        SELECT COUNT(DISTINCT l.medicamento_id) as count 
-        FROM lotes l
-        WHERE l.data_validade <= DATE('now', '+30 days') 
-        AND l.quantidade_atual > 0 AND l.ativo = 1
-    """, conn).iloc[0]['count']
-    
-    conn.close()
+    # Movimentações hoje
+    movimentacoes_hoje = pd.read_sql(
+        "SELECT COUNT(*) FROM movimentacoes WHERE DATE(data_movimento) = DATE('now')", conn
+    ).iloc[0, 0]
     
     with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>💊</h3>
-            <h2>{total_medicamentos}</h2>
-            <p>Medicamentos</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("💊 Medicamentos", total_medicamentos)
     
     with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>👥</h3>
-            <h2>{total_pacientes}</h2>
-            <p>Pacientes</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("📦 Lotes Ativos", total_lotes)
     
     with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>📅</h3>
-            <h2>{consultas_hoje}</h2>
-            <p>Consultas Hoje</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("👥 Pacientes", total_pacientes)
     
     with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>⚠️</h3>
-            <h2>{vencimento_proximo}</h2>
-            <p>Próximos ao Vencimento</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("📈 Movimentações Hoje", movimentacoes_hoje)
     
-    st.markdown("---")
-    
-    # Alertas importantes
-    if vencimento_proximo > 0:
-        st.markdown(f"""
-        <div class="alert-warning">
-            ⚠️ <strong>Atenção!</strong> Existem {vencimento_proximo} medicamentos com vencimento em 30 dias ou menos.
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Gráficos
+    # Gráficos do dashboard
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### 📊 Medicamentos por Categoria")
-        conn = st.session_state.db_manager.get_connection()
         df_categorias = pd.read_sql("""
             SELECT categoria, COUNT(*) as quantidade
             FROM medicamentos 
@@ -578,45 +625,96 @@ def show_dashboard():
             GROUP BY categoria
             ORDER BY quantidade DESC
         """, conn)
-        conn.close()
         
         if not df_categorias.empty:
             fig = px.pie(df_categorias, values='quantidade', names='categoria')
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Nenhum medicamento cadastrado ainda.")
+            st.info("Nenhum dado disponível")
     
     with col2:
-        st.markdown("### 📈 Consultas dos Últimos 7 Dias")
-        conn = st.session_state.db_manager.get_connection()
-        df_consultas = pd.read_sql("""
-            SELECT DATE(data_consulta) as data, COUNT(*) as quantidade
-            FROM consultas 
-            WHERE data_consulta >= DATE('now', '-7 days')
-            AND status != 'Cancelada'
-            GROUP BY DATE(data_consulta)
+        st.markdown("### 📈 Movimentações dos Últimos 7 Dias")
+        df_movimentacoes = pd.read_sql("""
+            SELECT 
+                DATE(data_movimento) as data,
+                tipo_movimento,
+                COUNT(*) as quantidade
+            FROM movimentacoes 
+            WHERE data_movimento >= DATE('now', '-7 days')
+            GROUP BY DATE(data_movimento), tipo_movimento
             ORDER BY data
         """, conn)
-        conn.close()
         
-        if not df_consultas.empty:
-            fig = px.line(df_consultas, x='data', y='quantidade', markers=True)
+        if not df_movimentacoes.empty:
+            fig = px.bar(df_movimentacoes, x='data', y='quantidade', color='tipo_movimento')
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Nenhuma consulta nos últimos 7 dias.")
+            st.info("Nenhum dado disponível")
+    
+    # Alertas críticos
+    st.markdown("### 🚨 Alertas Críticos")
+    
+    # Medicamentos próximos ao vencimento
+    df_vencimento = pd.read_sql("""
+        SELECT 
+            m.nome,
+            l.numero_lote,
+            l.data_validade,
+            l.quantidade_atual,
+            julianday(l.data_validade) - julianday('now') as dias_vencimento
+        FROM lotes l
+        JOIN medicamentos m ON l.medicamento_id = m.id
+        WHERE l.ativo = 1 AND DATE(l.data_validade) <= DATE('now', '+30 days')
+        AND l.quantidade_atual > 0
+        ORDER BY l.data_validade
+        LIMIT 5
+    """, conn)
+    
+    if not df_vencimento.empty:
+        st.markdown("#### ⚠️ Próximos ao Vencimento")
+        for _, item in df_vencimento.iterrows():
+            dias = int(item['dias_vencimento'])
+            if dias <= 7:
+                cor = "🔴"
+            elif dias <= 15:
+                cor = "🟡"
+            else:
+                cor = "🟠"
+            
+            st.warning(f"{cor} {item['nome']} (Lote: {item['numero_lote']}) - Vence em {dias} dias")
+    
+    # Medicamentos com estoque baixo
+    df_estoque_baixo = pd.read_sql("""
+        SELECT 
+            m.nome,
+            l.numero_lote,
+            l.quantidade_atual,
+            l.local_armazenamento
+        FROM lotes l
+        JOIN medicamentos m ON l.medicamento_id = m.id
+        WHERE l.ativo = 1 AND l.quantidade_atual > 0 AND l.quantidade_atual <= 10
+        ORDER BY l.quantidade_atual
+        LIMIT 5
+    """, conn)
+    
+    if not df_estoque_baixo.empty:
+        st.markdown("#### 📦 Estoque Baixo")
+        for _, item in df_estoque_baixo.iterrows():
+            st.warning(f"📦 {item['nome']} - {item['quantidade_atual']} unidades restantes")
+    
+    conn.close()
 
 def show_medicamentos():
     """Módulo de medicamentos"""
     st.markdown("## 💊 Gestão de Medicamentos")
     
-    # Verificar permissões
     if 'criar' in st.session_state.permissions.get('medicamentos', []):
-        tab1, tab2 = st.tabs(["📋 Lista de Medicamentos", "➕ Cadastrar Medicamento"])
+        tab1, tab2, tab3 = st.tabs(["📋 Lista de Medicamentos", "➕ Cadastrar Medicamento", "📊 Estatísticas"])
     else:
-        tab1, tab2 = st.tabs(["📋 Lista de Medicamentos", ""])
+        tab1, tab2, tab3 = st.tabs(["📋 Lista de Medicamentos", "", "📊 Estatísticas"])
     
     with tab1:
-        st.markdown("### 📋 Medicamentos Cadastrados")
+        st.markdown("### 📋 Lista de Medicamentos Cadastrados")
         
         # Filtros
         col1, col2, col3 = st.columns(3)
@@ -630,13 +728,18 @@ def show_medicamentos():
             categoria_filter = st.selectbox("📂 Categoria", ["Todas"] + categorias)
         
         with col3:
-            controlado_filter = st.selectbox("🎯 Tipo", ["Todos", "Controlados", "Não Controlados"])
+            tipo_filter = st.selectbox("🏷️ Tipo", ["Todos", "Controlado", "Refrigerado", "Prescrição Obrigatória"])
         
         # Buscar medicamentos
         query = """
-            SELECT m.*, u.nome_completo as cadastrado_por_nome
+            SELECT 
+                m.*,
+                u.nome_completo as cadastrado_por_nome,
+                COUNT(DISTINCT l.id) as total_lotes,
+                SUM(l.quantidade_atual) as estoque_total
             FROM medicamentos m
             LEFT JOIN usuarios u ON m.cadastrado_por = u.id
+            LEFT JOIN lotes l ON m.id = l.medicamento_id AND l.ativo = 1
             WHERE m.ativo = 1
         """
         params = []
@@ -649,39 +752,66 @@ def show_medicamentos():
             query += " AND m.categoria = ?"
             params.append(categoria_filter)
         
-        if controlado_filter == "Controlados":
-            query += " AND m.controlado = 1"
-        elif controlado_filter == "Não Controlados":
-            query += " AND m.controlado = 0"
+        if tipo_filter != "Todos":
+            if tipo_filter == "Controlado":
+                query += " AND m.controlado = 1"
+            elif tipo_filter == "Refrigerado":
+                query += " AND m.refrigerado = 1"
+            elif tipo_filter == "Prescrição Obrigatória":
+                query += " AND m.prescricao_obrigatoria = 1"
         
-        query += " ORDER BY m.nome"
+        query += " GROUP BY m.id ORDER BY m.nome"
         
         df_medicamentos = pd.read_sql(query, conn, params=params)
         conn.close()
         
         if not df_medicamentos.empty:
-            # Exibir tabela
+            st.info(f"📊 {len(df_medicamentos)} medicamentos encontrados")
+            
             for _, med in df_medicamentos.iterrows():
-                with st.expander(f"💊 {med['nome']} {'🔒' if med['controlado'] else ''}"):
+                # Status do medicamento
+                status_badges = []
+                if med['controlado']:
+                    status_badges.append("🔒 Controlado")
+                if med['refrigerado']:
+                    status_badges.append("❄️ Refrigerado")
+                if med['prescricao_obrigatoria']:
+                    status_badges.append("📋 Prescrição Obrigatória")
+                
+                status_text = " | ".join(status_badges) if status_badges else "📦 Comum"
+                
+                with st.expander(f"💊 {med['nome']} - {status_text}"):
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
+                        st.markdown("**📋 Informações Básicas**")
+                        st.write(f"**Nome:** {med['nome']}")
                         st.write(f"**Princípio Ativo:** {med['principio_ativo'] or 'N/A'}")
-                        st.write(f"**Fabricante:** {med['fabricante'] or 'N/A'}")
                         st.write(f"**Categoria:** {med['categoria'] or 'N/A'}")
+                        st.write(f"**Tipo:** {med['tipo'] or 'N/A'}")
+                        st.write(f"**Concentração:** {med['concentracao'] or 'N/A'}")
                     
                     with col2:
-                        st.write(f"**Apresentação:** {med['apresentacao'] or 'N/A'}")
-                        st.write(f"**Concentração:** {med['concentracao'] or 'N/A'}")
+                        st.markdown("**💊 Características**")
+                        st.write(f"**Forma Farmacêutica:** {med['forma_farmaceutica'] or 'N/A'}")
                         st.write(f"**Via de Administração:** {med['via_administracao'] or 'N/A'}")
+                        st.write(f"**Tarja:** {med['tarja'] or 'N/A'}")
+                        st.write(f"**Fabricante:** {med['fabricante'] or 'N/A'}")
+                        st.write(f"**Código de Barras:** {med['codigo_barras'] or 'N/A'}")
                     
                     with col3:
-                        st.write(f"**Registro ANVISA:** {med['registro_anvisa'] or 'N/A'}")
-                        st.write(f"**Controlado:** {'Sim' if med['controlado'] else 'Não'}")
-                        st.write(f"**Cadastrado por:** {med['cadastrado_por_nome'] or 'N/A'}")
+                        st.markdown("**📊 Estoque e Status**")
+                        st.write(f"**Total de Lotes:** {med['total_lotes'] or 0}")
+                        st.write(f"**Estoque Total:** {med['estoque_total'] or 0} unidades")
+                        if med['cadastrado_por_nome']:
+                            st.write(f"**Cadastrado por:** {med['cadastrado_por_nome']}")
+                        if med['data_cadastro']:
+                            data_cad = datetime.strptime(med['data_cadastro'], '%Y-%m-%d %H:%M:%S')
+                            st.write(f"**Data Cadastro:** {data_cad.strftime('%d/%m/%Y')}")
                     
                     if med['observacoes']:
-                        st.write(f"**Observações:** {med['observacoes']}")
+                        st.markdown("**📝 Observações:**")
+                        st.write(med['observacoes'])
         else:
             st.info("Nenhum medicamento encontrado com os filtros aplicados.")
     
@@ -690,33 +820,51 @@ def show_medicamentos():
             st.markdown("### ➕ Cadastrar Novo Medicamento")
             
             with st.form("form_medicamento"):
+                st.markdown("**📋 Informações Básicas**")
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    nome = st.text_input("Nome do Medicamento *", placeholder="Ex: Dipirona Sódica")
-                    principio_ativo = st.text_input("Princípio Ativo", placeholder="Ex: Dipirona Sódica")
-                    fabricante = st.text_input("Fabricante", placeholder="Ex: EMS")
+                    nome = st.text_input("Nome do Medicamento *", placeholder="Ex: Paracetamol 500mg")
+                    principio_ativo = st.text_input("Princípio Ativo", placeholder="Ex: Paracetamol")
                     categoria = st.selectbox("Categoria", [
-                        "", "Analgésicos", "Anti-inflamatórios", "Antibióticos", 
-                        "Antidepressivos", "Anti-hipertensivos", "Vitaminas",
-                        "Controlados", "Outros"
+                        "", "Analgésico", "Antibiótico", "Anti-inflamatório", "Antialérgico",
+                        "Antidiabético", "Anti-hipertensivo", "Vitamina", "Suplemento", "Outro"
                     ])
-                    apresentacao = st.text_input("Apresentação", placeholder="Ex: Comprimido, Ampola, Frasco")
+                    tipo = st.selectbox("Tipo", [
+                        "", "Medicamento", "Suplemento", "Vitamina", "Vacina", "Material Médico"
+                    ])
                 
                 with col2:
                     concentracao = st.text_input("Concentração", placeholder="Ex: 500mg")
-                    registro_anvisa = st.text_input("Registro ANVISA", placeholder="Ex: 1.0000.0000")
-                    controlado = st.checkbox("Medicamento Controlado")
-                    temperatura_armazenamento = st.selectbox("Temperatura de Armazenamento", [
-                        "", "Ambiente (15°C a 30°C)", "Refrigerado (2°C a 8°C)", 
-                        "Congelado (-20°C)", "Controlada (20°C a 25°C)"
+                    forma_farmaceutica = st.selectbox("Forma Farmacêutica", [
+                        "", "Comprimido", "Cápsula", "Solução", "Suspensão", "Pomada",
+                        "Creme", "Gel", "Spray", "Injetável", "Gotas"
                     ])
                     via_administracao = st.selectbox("Via de Administração", [
-                        "", "Oral", "Intravenosa", "Intramuscular", "Subcutânea",
-                        "Tópica", "Oftálmica", "Nasal", "Retal", "Outras"
+                        "", "Oral", "Tópica", "Intramuscular", "Intravenosa", "Subcutânea",
+                        "Oftálmica", "Nasal", "Auricular", "Retal", "Vaginal"
                     ])
+                    tarja = st.selectbox("Tarja", ["", "Sem Tarja", "Tarja Vermelha", "Tarja Preta"])
                 
-                observacoes = st.text_area("Observações", placeholder="Informações adicionais...")
+                st.markdown("**🏷️ Características Especiais**")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    controlado = st.checkbox("🔒 Medicamento Controlado")
+                with col2:
+                    refrigerado = st.checkbox("❄️ Necessita Refrigeração")
+                with col3:
+                    prescricao_obrigatoria = st.checkbox("📋 Prescrição Obrigatória")
+                
+                st.markdown("**🏭 Informações Comerciais**")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fabricante = st.text_input("Fabricante", placeholder="Nome do fabricante")
+                    codigo_barras = st.text_input("Código de Barras", placeholder="Ex: 7891234567890")
+                
+                with col2:
+                    observacoes = st.text_area("Observações", placeholder="Informações adicionais...")
                 
                 submitted = st.form_submit_button("💾 Cadastrar Medicamento", use_container_width=True)
                 
@@ -730,14 +878,16 @@ def show_medicamentos():
                             
                             cursor.execute("""
                                 INSERT INTO medicamentos (
-                                    nome, principio_ativo, fabricante, categoria, apresentacao,
-                                    concentracao, registro_anvisa, controlado, temperatura_armazenamento,
-                                    via_administracao, observacoes, cadastrado_por
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    nome, principio_ativo, categoria, tipo, concentracao,
+                                    forma_farmaceutica, via_administracao, controlado, refrigerado,
+                                    prescricao_obrigatoria, tarja, codigo_barras, fabricante,
+                                    observacoes, cadastrado_por
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, (
-                                nome, principio_ativo, fabricante, categoria, apresentacao,
-                                concentracao, registro_anvisa, controlado, temperatura_armazenamento,
-                                via_administracao, observacoes, st.session_state.user['id']
+                                nome, principio_ativo, categoria, tipo, concentracao,
+                                forma_farmaceutica, via_administracao, controlado, refrigerado,
+                                prescricao_obrigatoria, tarja, codigo_barras, fabricante,
+                                observacoes, st.session_state.user['id']
                             ))
                             
                             conn.commit()
@@ -749,22 +899,78 @@ def show_medicamentos():
                             
                         except Exception as e:
                             st.error(f"❌ Erro ao cadastrar medicamento: {str(e)}")
+    
+    with tab3:
+        st.markdown("### 📊 Estatísticas de Medicamentos")
+        
+        conn = st.session_state.db_manager.get_connection()
+        
+        # Estatísticas gerais
+        total_medicamentos = pd.read_sql("SELECT COUNT(*) FROM medicamentos WHERE ativo = 1", conn).iloc[0, 0]
+        controlados = pd.read_sql("SELECT COUNT(*) FROM medicamentos WHERE ativo = 1 AND controlado = 1", conn).iloc[0, 0]
+        refrigerados = pd.read_sql("SELECT COUNT(*) FROM medicamentos WHERE ativo = 1 AND refrigerado = 1", conn).iloc[0, 0]
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("💊 Total Medicamentos", total_medicamentos)
+        with col2:
+            st.metric("🔒 Controlados", controlados)
+        with col3:
+            st.metric("❄️ Refrigerados", refrigerados)
+        
+        # Gráficos
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Distribuição por categoria
+            df_cat = pd.read_sql("""
+                SELECT categoria, COUNT(*) as quantidade
+                FROM medicamentos 
+                WHERE ativo = 1 AND categoria IS NOT NULL
+                GROUP BY categoria
+                ORDER BY quantidade DESC
+            """, conn)
+            
+            if not df_cat.empty:
+                st.markdown("#### 📂 Por Categoria")
+                fig = px.bar(df_cat, x='categoria', y='quantidade')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Distribuição por forma farmacêutica
+            df_forma = pd.read_sql("""
+                SELECT forma_farmaceutica, COUNT(*) as quantidade
+                FROM medicamentos 
+                WHERE ativo = 1 AND forma_farmaceutica IS NOT NULL
+                GROUP BY forma_farmaceutica
+                ORDER BY quantidade DESC
+                LIMIT 10
+            """, conn)
+            
+            if not df_forma.empty:
+                st.markdown("#### 💊 Por Forma Farmacêutica")
+                fig = px.pie(df_forma, values='quantidade', names='forma_farmaceutica')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        conn.close()
+
+# FUNÇÕES ADICIONAIS DO SISTEMA (CONTINUAÇÃO DO CÓDIGO FORNECIDO)
 
 def show_estoque():
-    """Módulo de estoque"""
-    st.markdown("## 📦 Gestão de Estoque")
+    """Módulo de estoque avançado"""
+    st.markdown("## 📦 Gestão de Estoque Inteligente")
     
     # Verificar permissões
     if 'criar' in st.session_state.permissions.get('estoque', []):
-        tab1, tab2, tab3 = st.tabs(["📋 Estoque Atual", "➕ Entrada de Lote", "📊 Movimentações"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Estoque Atual", "➕ Entrada de Lote", "📊 Movimentações", "🗺️ Mapa 3D"])
     else:
-        tab1, tab2, tab3 = st.tabs(["📋 Estoque Atual", "", "📊 Movimentações"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Estoque Atual", "", "📊 Movimentações", "🗺️ Mapa 3D"])
     
     with tab1:
-        st.markdown("### 📋 Estoque Atual")
+        st.markdown("### 📋 Estoque Atual com Localização Inteligente")
         
-        # Filtros
-        col1, col2, col3 = st.columns(3)
+        # Filtros avançados
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             search_term = st.text_input("🔍 Buscar medicamento", placeholder="Nome do medicamento")
@@ -777,17 +983,26 @@ def show_estoque():
             locais = pd.read_sql("SELECT DISTINCT local_armazenamento FROM lotes WHERE local_armazenamento IS NOT NULL", conn)['local_armazenamento'].tolist()
             local_filter = st.selectbox("📍 Local", ["Todos"] + locais)
         
-        # Query base
+        with col4:
+            setor_filter = st.selectbox("🏢 Setor", ["Todos"] + 
+                pd.read_sql("SELECT DISTINCT setor FROM lotes WHERE setor IS NOT NULL", conn)['setor'].tolist())
+        
+        # Query base avançada
         query = """
             SELECT 
                 m.nome as medicamento,
                 m.principio_ativo,
+                m.controlado,
                 l.numero_lote,
                 l.data_validade,
                 l.quantidade_atual,
                 l.local_armazenamento,
+                l.setor,
+                l.prateleira,
+                l.posicao,
                 l.fornecedor,
                 l.preco_unitario,
+                julianday(l.data_validade) - julianday('now') as dias_vencimento,
                 CASE 
                     WHEN l.quantidade_atual = 0 THEN 'Sem estoque'
                     WHEN l.quantidade_atual <= 10 THEN 'Estoque baixo'
@@ -808,6 +1023,10 @@ def show_estoque():
             query += " AND l.local_armazenamento = ?"
             params.append(local_filter)
         
+        if setor_filter != "Todos":
+            query += " AND l.setor = ?"
+            params.append(setor_filter)
+        
         if status_filter != "Todos":
             if status_filter == "Em estoque":
                 query += " AND l.quantidade_atual > 10"
@@ -824,13 +1043,14 @@ def show_estoque():
         conn.close()
         
         if not df_estoque.empty:
-            # Resumo
+            # Resumo inteligente
             total_lotes = len(df_estoque)
             sem_estoque = len(df_estoque[df_estoque['quantidade_atual'] == 0])
             estoque_baixo = len(df_estoque[(df_estoque['quantidade_atual'] > 0) & (df_estoque['quantidade_atual'] <= 10)])
             proximo_vencimento = len(df_estoque[df_estoque['status'] == 'Próximo ao vencimento'])
+            medicamentos_controlados = len(df_estoque[df_estoque['controlado'] == 1])
             
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
                 st.metric("📦 Total de Lotes", total_lotes)
@@ -840,41 +1060,87 @@ def show_estoque():
                 st.metric("🟡 Estoque Baixo", estoque_baixo)
             with col4:
                 st.metric("⚠️ Próximo Vencimento", proximo_vencimento)
+            with col5:
+                st.metric("🔒 Controlados", medicamentos_controlados)
             
-            # Alertas
+            # Alertas inteligentes
             if sem_estoque > 0:
                 st.markdown(f"""
                 <div class="alert-danger">
-                    🔴 <strong>Atenção!</strong> {sem_estoque} lotes sem estoque.
+                    🔴 <strong>CRÍTICO!</strong> {sem_estoque} lotes sem estoque precisam de reposição imediata.
                 </div>
                 """, unsafe_allow_html=True)
             
             if proximo_vencimento > 0:
                 st.markdown(f"""
                 <div class="alert-warning">
-                    ⚠️ <strong>Alerta!</strong> {proximo_vencimento} lotes próximos ao vencimento.
+                    ⚠️ <strong>ALERTA!</strong> {proximo_vencimento} lotes próximos ao vencimento (30 dias).
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Tabela de estoque
-            st.dataframe(
-                df_estoque,
-                use_container_width=True,
-                column_config={
-                    "medicamento": "Medicamento",
-                    "numero_lote": "Lote",
-                    "data_validade": st.column_config.DateColumn("Validade", format="DD/MM/YYYY"),
-                    "quantidade_atual": "Quantidade",
-                    "local_armazenamento": "Local",
-                    "status": st.column_config.TextColumn("Status")
-                }
-            )
+            # Lista avançada com localização
+            st.markdown("### 📋 Lista Detalhada com Localização")
+            
+            for _, item in df_estoque.iterrows():
+                # Cor baseada no status
+                if item['status'] == 'Sem estoque':
+                    status_color = '🔴'
+                elif item['status'] == 'Estoque baixo':
+                    status_color = '🟡'
+                elif item['status'] == 'Próximo ao vencimento':
+                    status_color = '⚠️'
+                else:
+                    status_color = '🟢'
+                
+                controlado_badge = ' 🔒' if item['controlado'] else ''
+                
+                with st.expander(f"{status_color} {item['medicamento']}{controlado_badge} - Lote: {item['numero_lote']}"):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.markdown("**📊 Informações do Estoque**")
+                        st.write(f"**Quantidade:** {item['quantidade_atual']} unidades")
+                        st.write(f"**Status:** {item['status']}")
+                        st.write(f"**Validade:** {item['data_validade']}")
+                        if item['dias_vencimento'] and item['dias_vencimento'] > 0:
+                            st.write(f"**Dias para vencer:** {int(item['dias_vencimento'])}")
+                    
+                    with col2:
+                        st.markdown("**📍 Localização Física**")
+                        st.write(f"**Local:** {item['local_armazenamento'] or 'N/A'}")
+                        st.write(f"**Setor:** {item['setor'] or 'N/A'}")
+                        st.write(f"**Prateleira:** {item['prateleira'] or 'N/A'}")
+                        st.write(f"**Posição:** {item['posicao'] or 'N/A'}")
+                        
+                        # Localização completa
+                        if item['local_armazenamento']:
+                            localizacao = f"📍 {item['local_armazenamento']}"
+                            if item['setor']:
+                                localizacao += f" → {item['setor']}"
+                            if item['prateleira']:
+                                localizacao += f" → P{item['prateleira']}"
+                            if item['posicao']:
+                                localizacao += f" → {item['posicao']}"
+                            
+                            st.markdown(f"""
+                            <div class="medication-location">
+                                {localizacao}
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    with col3:
+                        st.markdown("**💰 Informações Comerciais**")
+                        st.write(f"**Fornecedor:** {item['fornecedor'] or 'N/A'}")
+                        if item['preco_unitario']:
+                            st.write(f"**Preço Unitário:** R$ {item['preco_unitario']:.2f}")
+                            valor_total = item['quantidade_atual'] * item['preco_unitario']
+                            st.write(f"**Valor Total:** R$ {valor_total:.2f}")
         else:
             st.info("Nenhum lote encontrado com os filtros aplicados.")
     
     if 'criar' in st.session_state.permissions.get('estoque', []):
         with tab2:
-            st.markdown("### ➕ Entrada de Novo Lote")
+            st.markdown("### ➕ Entrada de Novo Lote com Localização")
             
             # Buscar medicamentos
             conn = st.session_state.db_manager.get_connection()
@@ -884,7 +1150,8 @@ def show_estoque():
             if medicamentos.empty:
                 st.warning("⚠️ Nenhum medicamento cadastrado. Cadastre medicamentos primeiro.")
             else:
-                with st.form("form_lote"):
+                with st.form("form_lote_avancado"):
+                    st.markdown("**📦 Informações do Lote**")
                     col1, col2 = st.columns(2)
                     
                     with col1:
@@ -898,16 +1165,30 @@ def show_estoque():
                     with col2:
                         preco_unitario = st.number_input("Preço Unitário (R$)", min_value=0.0, step=0.01, format="%.2f")
                         fornecedor = st.text_input("Fornecedor", placeholder="Nome do fornecedor")
-                        local_armazenamento = st.selectbox("Local de Armazenamento", [
+                        observacoes = st.text_area("Observações", placeholder="Informações adicionais...")
+                    
+                    st.markdown("**📍 Localização Física Detalhada**")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        local_armazenamento = st.selectbox("Local de Armazenamento *", [
                             "", "Farmácia Central", "Sala de Medicamentos", "Geladeira", 
                             "Cofre (Controlados)", "Almoxarifado", "UTI", "Pronto Socorro"
                         ])
-                        observacoes = st.text_area("Observações", placeholder="Informações adicionais...")
                     
-                    submitted = st.form_submit_button("💾 Registrar Entrada", use_container_width=True)
+                    with col2:
+                        setor = st.text_input("Setor", placeholder="Ex: A, B, C")
+                    
+                    with col3:
+                        prateleira = st.text_input("Prateleira", placeholder="Ex: P1, P2")
+                    
+                    with col4:
+                        posicao = st.text_input("Posição", placeholder="Ex: A1, B3")
+                    
+                    submitted = st.form_submit_button("💾 Registrar Entrada Completa", use_container_width=True)
                     
                     if submitted:
-                        if not medicamento_selecionado or not numero_lote or not data_validade or not quantidade_inicial:
+                        if not medicamento_selecionado or not numero_lote or not data_validade or not quantidade_inicial or not local_armazenamento:
                             st.error("❌ Preencha todos os campos obrigatórios!")
                         elif data_validade <= date.today():
                             st.error("❌ A data de validade deve ser futura!")
@@ -918,17 +1199,19 @@ def show_estoque():
                                 
                                 medicamento_id = medicamento_options[medicamento_selecionado]
                                 
-                                # Inserir lote
+                                # Inserir lote com localização
                                 cursor.execute("""
                                     INSERT INTO lotes (
                                         medicamento_id, numero_lote, data_fabricacao, data_validade,
                                         quantidade_inicial, quantidade_atual, preco_unitario, fornecedor,
-                                        local_armazenamento, observacoes, responsavel_entrada
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        local_armazenamento, setor, prateleira, posicao, observacoes, 
+                                        responsavel_entrada
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 """, (
                                     medicamento_id, numero_lote, data_fabricacao, data_validade,
                                     quantidade_inicial, quantidade_inicial, preco_unitario, fornecedor,
-                                    local_armazenamento, observacoes, st.session_state.user['id']
+                                    local_armazenamento, setor, prateleira, posicao, observacoes,
+                                    st.session_state.user['id']
                                 ))
                                 
                                 lote_id = cursor.lastrowid
@@ -943,7 +1226,18 @@ def show_estoque():
                                 conn.commit()
                                 conn.close()
                                 
-                                st.success("✅ Lote registrado com sucesso!")
+                                # Criar alerta inteligente se próximo ao vencimento
+                                dias_para_vencer = (data_validade - date.today()).days
+                                if dias_para_vencer <= 30:
+                                    create_smart_alert(
+                                        "estoque",
+                                        "atencao" if dias_para_vencer > 7 else "urgente",
+                                        "Medicamento próximo ao vencimento",
+                                        f"Lote {numero_lote} vence em {dias_para_vencer} dias",
+                                        medicamento_id=medicamento_id
+                                    )
+                                
+                                st.success("✅ Lote registrado com localização completa!")
                                 time.sleep(2)
                                 st.rerun()
                                 
@@ -951,10 +1245,10 @@ def show_estoque():
                                 st.error(f"❌ Erro ao registrar lote: {str(e)}")
     
     with tab3:
-        st.markdown("### 📊 Histórico de Movimentações")
+        st.markdown("### 📊 Histórico Inteligente de Movimentações")
         
-        # Filtros de data
-        col1, col2, col3 = st.columns(3)
+        # Filtros avançados
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             data_inicio = st.date_input("Data Início", value=date.today() - timedelta(days=30))
@@ -963,18 +1257,24 @@ def show_estoque():
             data_fim = st.date_input("Data Fim", value=date.today())
         
         with col3:
-            tipo_movimento = st.selectbox("Tipo de Movimento", ["Todos", "Entrada", "Saída", "Ajuste"])
+            tipo_movimento = st.selectbox("Tipo de Movimento", ["Todos", "Entrada", "Saída", "Ajuste", "Transferência"])
+        
+        with col4:
+            medicamento_filtro = st.text_input("Filtrar Medicamento", placeholder="Nome do medicamento")
         
         # Buscar movimentações
         query = """
             SELECT 
                 m.nome as medicamento,
                 l.numero_lote,
+                l.local_armazenamento,
+                l.setor,
                 mov.tipo_movimento,
                 mov.quantidade,
                 mov.motivo,
                 mov.data_movimento,
-                u.nome_completo as responsavel
+                u.nome_completo as responsavel,
+                mov.observacoes
             FROM movimentacoes mov
             JOIN lotes l ON mov.lote_id = l.id
             JOIN medicamentos m ON l.medicamento_id = m.id
@@ -987,1048 +1287,183 @@ def show_estoque():
             query += " AND mov.tipo_movimento = ?"
             params.append(tipo_movimento)
         
+        if medicamento_filtro:
+            query += " AND m.nome LIKE ?"
+            params.append(f"%{medicamento_filtro}%")
+        
         query += " ORDER BY mov.data_movimento DESC"
         
         conn = st.session_state.db_manager.get_connection()
         df_movimentacoes = pd.read_sql(query, conn, params=params)
-        conn.close()
         
+        # Estatísticas das movimentações
         if not df_movimentacoes.empty:
-            st.dataframe(
-                df_movimentacoes,
-                use_container_width=True,
-                column_config={
-                    "data_movimento": st.column_config.DatetimeColumn("Data/Hora", format="DD/MM/YYYY HH:mm")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                entradas = len(df_movimentacoes[df_movimentacoes['tipo_movimento'] == 'Entrada'])
+                st.metric("📥 Entradas", entradas)
+            
+            with col2:
+                saidas = len(df_movimentacoes[df_movimentacoes['tipo_movimento'] == 'Saída'])
+                st.metric("📤 Saídas", saidas)
+            
+            with col3:
+                ajustes = len(df_movimentacoes[df_movimentacoes['tipo_movimento'] == 'Ajuste'])
+                st.metric("🔧 Ajustes", ajustes)
+            
+            # Gráfico de movimentações por dia
+            st.markdown("### 📈 Movimentações por Dia")
+            df_grafico = df_movimentacoes.copy()
+            df_grafico['data'] = pd.to_datetime(df_grafico['data_movimento']).dt.date
+            df_resumo = df_grafico.groupby(['data', 'tipo_movimento']).size().reset_index(name='quantidade')
+            
+            if not df_resumo.empty:
+                fig = px.bar(df_resumo, x='data', y='quantidade', color='tipo_movimento', 
+                           title="Movimentações por Tipo e Data")
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Lista detalhada
+            st.markdown("### 📋 Lista Detalhada")
+            for _, mov in df_movimentacoes.iterrows():
+                # Ícone baseado no tipo
+                tipo_icons = {
+                    'Entrada': '📥',
+                    'Saída': '📤', 
+                    'Ajuste': '🔧',
+                    'Transferência': '🔄'
                 }
-            )
-        else:
+                icon = tipo_icons.get(mov['tipo_movimento'], '📋')
+                
+                data_mov = datetime.strptime(mov['data_movimento'], '%Y-%m-%d %H:%M:%S')
+                
+                with st.expander(f"{icon} {mov['medicamento']} - {data_mov.strftime('%d/%m/%Y %H:%M')}"):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.write(f"**Medicamento:** {mov['medicamento']}")
+                        st.write(f"**Lote:** {mov['numero_lote']}")
+                        st.write(f"**Tipo:** {mov['tipo_movimento']}")
+                        st.write(f"**Quantidade:** {mov['quantidade']}")
+                    
+                    with col2:
+                        st.write(f"**Local:** {mov['local_armazenamento'] or 'N/A'}")
+                        st.write(f"**Setor:** {mov['setor'] or 'N/A'}")
+                        st.write(f"**Responsável:** {mov['responsavel']}")
+                        st.write(f"**Data/Hora:** {data_mov.strftime('%d/%m/%Y %H:%M')}")
+                    
+                    with col3:
+                        st.write(f"**Motivo:** {mov['motivo'] or 'N/A'}")
+                        if mov['observacoes']:
+                            st.write(f"**Observações:** {mov['observacoes']}")
+        
+        conn.close()
+        
+        if df_movimentacoes.empty:
             st.info("Nenhuma movimentação encontrada no período selecionado.")
-
-def show_pacientes():
-    """Módulo de pacientes"""
-    st.markdown("## 👥 Gestão de Pacientes")
-    
-    # Verificar permissões
-    if 'criar' in st.session_state.permissions.get('pacientes', []):
-        tab1, tab2 = st.tabs(["📋 Lista de Pacientes", "➕ Cadastrar Paciente"])
-    else:
-        tab1, tab2 = st.tabs(["📋 Lista de Pacientes", ""])
-    
-    with tab1:
-        st.markdown("### 📋 Pacientes Cadastrados")
-        
-        # Filtros
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            search_term = st.text_input("🔍 Buscar paciente", placeholder="Nome ou CPF")
-        
-        with col2:
-            conn = st.session_state.db_manager.get_connection()
-            planos = pd.read_sql("SELECT DISTINCT plano_saude FROM pacientes WHERE plano_saude IS NOT NULL", conn)['plano_saude'].tolist()
-            plano_filter = st.selectbox("🏥 Plano de Saúde", ["Todos"] + planos)
-        
-        # Buscar pacientes
-        query = """
-            SELECT p.*, u.nome_completo as cadastrado_por_nome
-            FROM pacientes p
-            LEFT JOIN usuarios u ON p.cadastrado_por = u.id
-            WHERE p.ativo = 1
-        """
-        params = []
-        
-        if search_term:
-            query += " AND (p.nome_completo LIKE ? OR p.cpf LIKE ?)"
-            params.extend([f"%{search_term}%", f"%{search_term}%"])
-        
-        if plano_filter != "Todos":
-            query += " AND p.plano_saude = ?"
-            params.append(plano_filter)
-        
-        query += " ORDER BY p.nome_completo"
-        
-        df_pacientes = pd.read_sql(query, conn, params=params)
-        conn.close()
-        
-        if not df_pacientes.empty:
-            for _, pac in df_pacientes.iterrows():
-                with st.expander(f"👤 {pac['nome_completo']} - {pac['cpf'] or 'CPF não informado'}"):
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.write(f"**Nome:** {pac['nome_completo']}")
-                        st.write(f"**CPF:** {pac['cpf'] or 'N/A'}")
-                        st.write(f"**RG:** {pac['rg'] or 'N/A'}")
-                        st.write(f"**Data de Nascimento:** {pac['data_nascimento'] or 'N/A'}")
-                        st.write(f"**Sexo:** {pac['sexo'] or 'N/A'}")
-                    
-                    with col2:
-                        st.write(f"**Telefone:** {pac['telefone'] or 'N/A'}")
-                        st.write(f"**Email:** {pac['email'] or 'N/A'}")
-                        st.write(f"**Cidade:** {pac['cidade'] or 'N/A'}")
-                        st.write(f"**Estado:** {pac['estado'] or 'N/A'}")
-                        st.write(f"**CEP:** {pac['cep'] or 'N/A'}")
-                    
-                    with col3:
-                        st.write(f"**Plano de Saúde:** {pac['plano_saude'] or 'N/A'}")
-                        st.write(f"**Carteirinha:** {pac['numero_carteirinha'] or 'N/A'}")
-                        st.write(f"**Contato de Emergência:** {pac['contato_emergencia'] or 'N/A'}")
-                        st.write(f"**Cadastrado por:** {pac['cadastrado_por_nome'] or 'N/A'}")
-                    
-                    if pac['endereco']:
-                        st.write(f"**Endereço:** {pac['endereco']}")
-                    if pac['observacoes']:
-                        st.write(f"**Observações:** {pac['observacoes']}")
-        else:
-            st.info("Nenhum paciente encontrado com os filtros aplicados.")
-    
-    if 'criar' in st.session_state.permissions.get('pacientes', []):
-        with tab2:
-            st.markdown("### ➕ Cadastrar Novo Paciente")
-            
-            with st.form("form_paciente"):
-                st.markdown("**Dados Pessoais**")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    nome_completo = st.text_input("Nome Completo *", placeholder="Nome completo do paciente")
-                    cpf = st.text_input("CPF", placeholder="000.000.000-00")
-                    rg = st.text_input("RG", placeholder="00.000.000-0")
-                    data_nascimento = st.date_input("Data de Nascimento")
-                    sexo = st.selectbox("Sexo", ["", "Masculino", "Feminino", "Outro", "Não informar"])
-                
-                with col2:
-                    telefone = st.text_input("Telefone", placeholder="(00) 00000-0000")
-                    email = st.text_input("Email", placeholder="email@exemplo.com")
-                    contato_emergencia = st.text_input("Contato de Emergência", placeholder="Nome e telefone")
-                
-                st.markdown("**Endereço**")
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    endereco = st.text_input("Endereço", placeholder="Rua, número, complemento")
-                    cidade = st.text_input("Cidade", placeholder="Nome da cidade")
-                
-                with col2:
-                    estado = st.selectbox("Estado", [
-                        "", "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", 
-                        "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", 
-                        "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"
-                    ])
-                    cep = st.text_input("CEP", placeholder="00000-000")
-                
-                st.markdown("**Convênio/Plano de Saúde**")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    plano_saude = st.text_input("Plano de Saúde", placeholder="Nome do plano/convênio")
-                
-                with col2:
-                    numero_carteirinha = st.text_input("Número da Carteirinha", placeholder="Número da carteirinha")
-                
-                observacoes = st.text_area("Observações", placeholder="Informações adicionais sobre o paciente...")
-                
-                submitted = st.form_submit_button("💾 Cadastrar Paciente", use_container_width=True)
-                
-                if submitted:
-                    if not nome_completo:
-                        st.error("❌ O nome completo é obrigatório!")
-                    else:
-                        try:
-                            conn = st.session_state.db_manager.get_connection()
-                            cursor = conn.cursor()
-                            
-                            cursor.execute("""
-                                INSERT INTO pacientes (
-                                    nome_completo, cpf, rg, data_nascimento, sexo, telefone, email,
-                                    endereco, cidade, estado, cep, plano_saude, numero_carteirinha,
-                                    contato_emergencia, observacoes, cadastrado_por
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                nome_completo, cpf, rg, data_nascimento, sexo, telefone, email,
-                                endereco, cidade, estado, cep, plano_saude, numero_carteirinha,
-                                contato_emergencia, observacoes, st.session_state.user['id']
-                            ))
-                            
-                            conn.commit()
-                            conn.close()
-                            
-                            st.success("✅ Paciente cadastrado com sucesso!")
-                            time.sleep(2)
-                            st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"❌ Erro ao cadastrar paciente: {str(e)}")
-
-def show_consultas():
-    """Módulo de consultas"""
-    st.markdown("## 📅 Gestão de Consultas")
-    
-    # Verificar permissões
-    if 'criar' in st.session_state.permissions.get('consultas', []):
-        tab1, tab2 = st.tabs(["📋 Agenda de Consultas", "➕ Agendar Consulta"])
-    else:
-        tab1, tab2 = st.tabs(["📋 Agenda de Consultas", ""])
-    
-    with tab1:
-        st.markdown("### 📋 Agenda de Consultas")
-        
-        # Filtros
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            data_consulta = st.date_input("📅 Data", value=date.today())
-        
-        with col2:
-            conn = st.session_state.db_manager.get_connection()
-            medicos = pd.read_sql("SELECT id, nome_completo FROM usuarios WHERE perfil = 'Médico' AND ativo = 1", conn)
-            medico_options = ["Todos"] + [f"{row['nome_completo']}" for _, row in medicos.iterrows()]
-            medico_filter = st.selectbox("👨‍⚕️ Médico", medico_options)
-        
-        with col3:
-            status_filter = st.selectbox("📊 Status", ["Todos", "Agendada", "Confirmada", "Em andamento", "Concluída", "Cancelada"])
-        
-        # Buscar consultas
-        query = """
-            SELECT 
-                c.*,
-                p.nome_completo as paciente_nome,
-                m.nome_completo as medico_nome,
-                a.nome_completo as agendado_por_nome
-            FROM consultas c
-            JOIN pacientes p ON c.paciente_id = p.id
-            JOIN usuarios m ON c.medico_id = m.id
-            LEFT JOIN usuarios a ON c.agendado_por = a.id
-            WHERE DATE(c.data_consulta) = ?
-        """
-        params = [data_consulta]
-        
-        if medico_filter != "Todos":
-            # Encontrar o ID do médico selecionado
-            medico_selecionado = medicos[medicos['nome_completo'] == medico_filter].iloc[0]['id']
-            query += " AND c.medico_id = ?"
-            params.append(medico_selecionado)
-        
-        if status_filter != "Todos":
-            query += " AND c.status = ?"
-            params.append(status_filter)
-        
-        query += " ORDER BY c.data_consulta"
-        
-        df_consultas = pd.read_sql(query, conn, params=params)
-        conn.close()
-        
-        if not df_consultas.empty:
-            for _, cons in df_consultas.iterrows():
-                # Definir cor baseada no status
-                status_color = {
-                    'Agendada': '🟡',
-                    'Confirmada': '🟢',
-                    'Em andamento': '🔵',
-                    'Concluída': '✅',
-                    'Cancelada': '🔴'
-                }.get(cons['status'], '⚪')
-                
-                data_hora = datetime.strptime(cons['data_consulta'], '%Y-%m-%d %H:%M:%S')
-                
-                with st.expander(f"{status_color} {data_hora.strftime('%H:%M')} - {cons['paciente_nome']} - Dr(a). {cons['medico_nome']}"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.write(f"**Paciente:** {cons['paciente_nome']}")
-                        st.write(f"**Médico:** Dr(a). {cons['medico_nome']}")
-                        st.write(f"**Data/Hora:** {data_hora.strftime('%d/%m/%Y %H:%M')}")
-                        st.write(f"**Tipo:** {cons['tipo_consulta'] or 'N/A'}")
-                        st.write(f"**Status:** {cons['status']}")
-                    
-                    with col2:
-                        st.write(f"**Motivo:** {cons['motivo'] or 'N/A'}")
-                        st.write(f"**Valor:** R$ {cons['valor']:.2f}" if cons['valor'] else "Valor: N/A")
-                        st.write(f"**Agendado por:** {cons['agendado_por_nome'] or 'N/A'}")
-                    
-                    if cons['diagnostico']:
-                        st.write(f"**Diagnóstico:** {cons['diagnostico']}")
-                    if cons['observacoes']:
-                        st.write(f"**Observações:** {cons['observacoes']}")
-                    
-                    # Ações para a consulta
-                    if 'editar' in st.session_state.permissions.get('consultas', []):
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            if st.button("✅ Marcar como Concluída", key=f"concluir_{cons['id']}"):
-                                # Atualizar status da consulta
-                                pass
-                        
-                        with col2:
-                            if st.button("❌ Cancelar", key=f"cancelar_{cons['id']}"):
-                                # Cancelar consulta
-                                pass
-                        
-                        with col3:
-                            if st.button("📝 Prescrever", key=f"prescrever_{cons['id']}"):
-                                # Redirecionar para receitas
-                                pass
-        else:
-            st.info(f"Nenhuma consulta agendada para {data_consulta.strftime('%d/%m/%Y')}.")
-    
-    if 'criar' in st.session_state.permissions.get('consultas', []):
-        with tab2:
-            st.markdown("### ➕ Agendar Nova Consulta")
-            
-            # Buscar pacientes e médicos
-            conn = st.session_state.db_manager.get_connection()
-            pacientes = pd.read_sql("SELECT id, nome_completo FROM pacientes WHERE ativo = 1 ORDER BY nome_completo", conn)
-            medicos = pd.read_sql("SELECT id, nome_completo FROM usuarios WHERE perfil = 'Médico' AND ativo = 1 ORDER BY nome_completo", conn)
-            conn.close()
-            
-            if pacientes.empty:
-                st.warning("⚠️ Nenhum paciente cadastrado. Cadastre pacientes primeiro.")
-            elif medicos.empty:
-                st.warning("⚠️ Nenhum médico cadastrado. Cadastre médicos primeiro.")
-            else:
-                with st.form("form_consulta"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        paciente_options = {f"{row['nome_completo']}": row['id'] for _, row in pacientes.iterrows()}
-                        paciente_selecionado = st.selectbox("Paciente *", list(paciente_options.keys()))
-                        
-                        medico_options = {f"{row['nome_completo']}": row['id'] for _, row in medicos.iterrows()}
-                        medico_selecionado = st.selectbox("Médico *", list(medico_options.keys()))
-                        
-                        data_consulta_agendamento = st.date_input("Data da Consulta *", value=date.today())
-                        hora_consulta = st.time_input("Horário da Consulta *")
-                    
-                    with col2:
-                        tipo_consulta = st.selectbox("Tipo de Consulta", [
-                            "", "Consulta inicial", "Retorno", "Emergência", "Exame",
-                            "Procedimento", "Teleconsulta", "Outros"
-                        ])
-                        
-                        valor = st.number_input("Valor da Consulta (R$)", min_value=0.0, step=0.01, format="%.2f")
-                        
-                        motivo = st.text_area("Motivo da Consulta", placeholder="Descreva o motivo da consulta...")
-                    
-                    observacoes = st.text_area("Observações", placeholder="Informações adicionais...")
-                    
-                    submitted = st.form_submit_button("📅 Agendar Consulta", use_container_width=True)
-                    
-                    if submitted:
-                        if not paciente_selecionado or not medico_selecionado or not data_consulta_agendamento or not hora_consulta:
-                            st.error("❌ Preencha todos os campos obrigatórios!")
-                        else:
-                            try:
-                                # Combinar data e hora
-                                data_hora_consulta = datetime.combine(data_consulta_agendamento, hora_consulta)
-                                
-                                conn = st.session_state.db_manager.get_connection()
-                                cursor = conn.cursor()
-                                
-                                # Verificar conflito de horário
-                                cursor.execute("""
-                                    SELECT COUNT(*) as conflitos FROM consultas 
-                                    WHERE medico_id = ? AND data_consulta = ? AND status NOT IN ('Cancelada')
-                                """, (medico_options[medico_selecionado], data_hora_consulta))
-                                
-                                conflitos = cursor.fetchone()[0]
-                                
-                                if conflitos > 0:
-                                    st.error("❌ Já existe uma consulta agendada para este médico neste horário!")
-                                else:
-                                    cursor.execute("""
-                                        INSERT INTO consultas (
-                                            paciente_id, medico_id, data_consulta, tipo_consulta,
-                                            motivo, valor, observacoes, agendado_por
-                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                    """, (
-                                        paciente_options[paciente_selecionado],
-                                        medico_options[medico_selecionado],
-                                        data_hora_consulta,
-                                        tipo_consulta,
-                                        motivo,
-                                        valor if valor > 0 else None,
-                                        observacoes,
-                                        st.session_state.user['id']
-                                    ))
-                                    
-                                    conn.commit()
-                                    conn.close()
-                                    
-                                    st.success("✅ Consulta agendada com sucesso!")
-                                    time.sleep(2)
-                                    st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"❌ Erro ao agendar consulta: {str(e)}")
-
-def show_receitas():
-    """Módulo de receitas"""
-    st.markdown("## 📝 Gestão de Receitas")
-    
-    # Verificar permissões
-    if 'criar' in st.session_state.permissions.get('receitas', []):
-        tab1, tab2 = st.tabs(["📋 Receitas", "➕ Nova Receita"])
-    else:
-        tab1, tab2 = st.tabs(["📋 Receitas", ""])
-    
-    with tab1:
-        st.markdown("### 📋 Receitas Emitidas")
-        
-        # Filtros
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            search_term = st.text_input("🔍 Buscar", placeholder="Nome do paciente")
-        
-        with col2:
-            periodo = st.selectbox("📅 Período", ["Últimos 7 dias", "Últimos 30 dias", "Últimos 90 dias", "Personalizado"])
-        
-        with col3:
-            status_filter = st.selectbox("📊 Status", ["Todas", "Ativa", "Dispensada", "Cancelada"])
-        
-        # Definir período de busca
-        if periodo == "Últimos 7 dias":
-            data_inicio = date.today() - timedelta(days=7)
-            data_fim = date.today()
-        elif periodo == "Últimos 30 dias":
-            data_inicio = date.today() - timedelta(days=30)
-            data_fim = date.today()
-        elif periodo == "Últimos 90 dias":
-            data_inicio = date.today() - timedelta(days=90)
-            data_fim = date.today()
-        else:  # Personalizado
-            col1, col2 = st.columns(2)
-            with col1:
-                data_inicio = st.date_input("Data Início", value=date.today() - timedelta(days=30))
-            with col2:
-                data_fim = st.date_input("Data Fim", value=date.today())
-        
-        # Buscar receitas
-        query = """
-            SELECT 
-                r.*,
-                p.nome_completo as paciente_nome,
-                m.nome_completo as medico_nome,
-                COUNT(ri.id) as total_medicamentos
-            FROM receitas r
-            JOIN pacientes p ON r.paciente_id = p.id
-            JOIN usuarios m ON r.medico_id = m.id
-            LEFT JOIN receita_itens ri ON r.id = ri.receita_id
-            WHERE DATE(r.data_emissao) BETWEEN ? AND ?
-        """
-        params = [data_inicio, data_fim]
-        
-        if search_term:
-            query += " AND p.nome_completo LIKE ?"
-            params.append(f"%{search_term}%")
-        
-        if status_filter != "Todas":
-            query += " AND r.status = ?"
-            params.append(status_filter)
-        
-        query += " GROUP BY r.id ORDER BY r.data_emissao DESC"
-        
-        conn = st.session_state.db_manager.get_connection()
-        df_receitas = pd.read_sql(query, conn, params=params)
-        
-        if not df_receitas.empty:
-            for _, rec in df_receitas.iterrows():
-                status_icon = {'Ativa': '🟢', 'Dispensada': '✅', 'Cancelada': '🔴'}.get(rec['status'], '⚪')
-                data_emissao = datetime.strptime(rec['data_emissao'], '%Y-%m-%d %H:%M:%S')
-                
-                with st.expander(f"{status_icon} Receita #{rec['id']} - {rec['paciente_nome']} - {data_emissao.strftime('%d/%m/%Y')}"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.write(f"**Paciente:** {rec['paciente_nome']}")
-                        st.write(f"**Médico:** Dr(a). {rec['medico_nome']}")
-                        st.write(f"**Data de Emissão:** {data_emissao.strftime('%d/%m/%Y %H:%M')}")
-                        st.write(f"**Status:** {rec['status']}")
-                    
-                    with col2:
-                        st.write(f"**Total de Medicamentos:** {rec['total_medicamentos']}")
-                        if rec['observacoes']:
-                            st.write(f"**Observações:** {rec['observacoes']}")
-                    
-                    # Buscar itens da receita
-                    itens_query = """
-                        SELECT 
-                            ri.*,
-                            m.nome as medicamento_nome
-                        FROM receita_itens ri
-                        JOIN medicamentos m ON ri.medicamento_id = m.id
-                        WHERE ri.receita_id = ?
-                    """
-                    df_itens = pd.read_sql(itens_query, conn, params=[rec['id']])
-                    
-                    if not df_itens.empty:
-                        st.markdown("**Medicamentos Prescritos:**")
-                        for _, item in df_itens.iterrows():
-                            st.write(f"• {item['medicamento_nome']} - {item['dosagem']} - {item['frequencia']} - Qtd: {item['quantidade']}")
-                            if item['duracao_tratamento']:
-                                st.write(f"  Duração: {item['duracao_tratamento']}")
-                            if item['instrucoes_uso']:
-                                st.write(f"  Instruções: {item['instrucoes_uso']}")
-        
-        conn.close()
-        
-        if df_receitas.empty:
-            st.info("Nenhuma receita encontrada com os filtros aplicados.")
-    
-    if 'criar' in st.session_state.permissions.get('receitas', []):
-        with tab2:
-            st.markdown("### ➕ Prescrever Nova Receita")
-            
-            # Buscar pacientes e medicamentos
-            conn = st.session_state.db_manager.get_connection()
-            pacientes = pd.read_sql("SELECT id, nome_completo FROM pacientes WHERE ativo = 1 ORDER BY nome_completo", conn)
-            medicamentos = pd.read_sql("SELECT id, nome FROM medicamentos WHERE ativo = 1 ORDER BY nome", conn)
-            conn.close()
-            
-            if pacientes.empty:
-                st.warning("⚠️ Nenhum paciente cadastrado.")
-            elif medicamentos.empty:
-                st.warning("⚠️ Nenhum medicamento cadastrado.")
-            else:
-                with st.form("form_receita"):
-                    # Dados da receita
-                    paciente_options = {f"{row['nome_completo']}": row['id'] for _, row in pacientes.iterrows()}
-                    paciente_selecionado = st.selectbox("Paciente *", list(paciente_options.keys()))
-                    
-                    observacoes_receita = st.text_area("Observações da Receita", placeholder="Orientações gerais...")
-                    
-                    st.markdown("---")
-                    st.markdown("**Medicamentos Prescritos**")
-                    
-                    # Sistema para adicionar medicamentos
-                    if 'medicamentos_receita' not in st.session_state:
-                        st.session_state.medicamentos_receita = []
-                    
-                    # Formulário para adicionar medicamento
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        medicamento_options = {f"{row['nome']}": row['id'] for _, row in medicamentos.iterrows()}
-                        medicamento_selecionado = st.selectbox("Medicamento", [""] + list(medicamento_options.keys()))
-                        dosagem = st.text_input("Dosagem", placeholder="Ex: 500mg")
-                    
-                    with col2:
-                        frequencia = st.text_input("Frequência", placeholder="Ex: 8/8h, 2x ao dia")
-                        quantidade = st.number_input("Quantidade", min_value=1, value=1)
-                    
-                    with col3:
-                        duracao_tratamento = st.text_input("Duração do Tratamento", placeholder="Ex: 7 dias")
-                        instrucoes_uso = st.text_input("Instruções de Uso", placeholder="Ex: Após as refeições")
-                    
-                    # Botão para adicionar medicamento à lista
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        if st.form_submit_button("➕ Adicionar Medicamento"):
-                            if medicamento_selecionado and dosagem and frequencia:
-                                novo_medicamento = {
-                                    'medicamento_id': medicamento_options[medicamento_selecionado],
-                                    'medicamento_nome': medicamento_selecionado,
-                                    'dosagem': dosagem,
-                                    'frequencia': frequencia,
-                                    'quantidade': quantidade,
-                                    'duracao_tratamento': duracao_tratamento,
-                                    'instrucoes_uso': instrucoes_uso
-                                }
-                                st.session_state.medicamentos_receita.append(novo_medicamento)
-                                st.success("Medicamento adicionado!")
-                            else:
-                                st.error("Preencha pelo menos: medicamento, dosagem e frequência!")
-                    
-                    with col2:
-                        if st.form_submit_button("💾 Salvar Receita"):
-                            if not paciente_selecionado:
-                                st.error("❌ Selecione um paciente!")
-                            elif not st.session_state.medicamentos_receita:
-                                st.error("❌ Adicione pelo menos um medicamento!")
-                            else:
-                                try:
-                                    conn = st.session_state.db_manager.get_connection()
-                                    cursor = conn.cursor()
-                                    
-                                    # Inserir receita
-                                    cursor.execute("""
-                                        INSERT INTO receitas (
-                                            paciente_id, medico_id, observacoes
-                                        ) VALUES (?, ?, ?)
-                                    """, (
-                                        paciente_options[paciente_selecionado],
-                                        st.session_state.user['id'],
-                                        observacoes_receita
-                                    ))
-                                    
-                                    receita_id = cursor.lastrowid
-                                    
-                                    # Inserir itens da receita
-                                    for medicamento in st.session_state.medicamentos_receita:
-                                        cursor.execute("""
-                                            INSERT INTO receita_itens (
-                                                receita_id, medicamento_id, dosagem, quantidade,
-                                                frequencia, duracao_tratamento, instrucoes_uso
-                                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                                        """, (
-                                            receita_id,
-                                            medicamento['medicamento_id'],
-                                            medicamento['dosagem'],
-                                            medicamento['quantidade'],
-                                            medicamento['frequencia'],
-                                            medicamento['duracao_tratamento'],
-                                            medicamento['instrucoes_uso']
-                                        ))
-                                    
-                                    conn.commit()
-                                    conn.close()
-                                    
-                                    st.success("✅ Receita criada com sucesso!")
-                                    st.session_state.medicamentos_receita = []  # Limpar lista
-                                    time.sleep(2)
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Erro ao criar receita: {str(e)}")
-                
-                # Exibir medicamentos adicionados
-                if st.session_state.medicamentos_receita:
-                    st.markdown("**Medicamentos Adicionados:**")
-                    for i, med in enumerate(st.session_state.medicamentos_receita):
-                        col1, col2 = st.columns([4, 1])
-                        
-                        with col1:
-                            st.write(f"• {med['medicamento_nome']} - {med['dosagem']} - {med['frequencia']} - Qtd: {med['quantidade']}")
-                        
-                        with col2:
-                            if st.button("🗑️", key=f"remove_{i}"):
-                                st.session_state.medicamentos_receita.pop(i)
-                                st.rerun()
-
-def show_usuarios():
-    """Módulo de usuários"""
-    st.markdown("## 👤 Gestão de Usuários")
-    
-    # Verificar se tem permissão para usuários
-    if 'usuarios' not in st.session_state.permissions:
-        st.error("❌ Você não tem permissão para acessar esta área!")
-        return
-    
-    tab1, tab2 = st.tabs(["📋 Lista de Usuários", "➕ Novo Usuário"])
-    
-    with tab1:
-        st.markdown("### 📋 Usuários do Sistema")
-        
-        # Buscar usuários
-        conn = st.session_state.db_manager.get_connection()
-        df_usuarios = pd.read_sql("""
-            SELECT 
-                u.*,
-                c.nome_completo as criado_por_nome
-            FROM usuarios u
-            LEFT JOIN usuarios c ON u.criado_por = c.id
-            ORDER BY u.nome_completo
-        """, conn)
-        conn.close()
-        
-        if not df_usuarios.empty:
-            for _, user in df_usuarios.iterrows():
-                status_icon = "🟢" if user['ativo'] else "🔴"
-                perfil_icon = {
-                    'Administrador': '👑',
-                    'Médico': '👨‍⚕️',
-                    'Farmacêutico': '💊',
-                    'Enfermeiro': '👩‍⚕️'
-                }.get(user['perfil'], '👤')
-                
-                with st.expander(f"{status_icon} {perfil_icon} {user['nome_completo']} - {user['perfil']}"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.write(f"**Nome:** {user['nome_completo']}")
-                        st.write(f"**Usuário:** {user['username']}")
-                        st.write(f"**Perfil:** {user['perfil']}")
-                        st.write(f"**Email:** {user['email'] or 'N/A'}")
-                    
-                    with col2:
-                        st.write(f"**CRM/CRF:** {user['crm_crf'] or 'N/A'}")
-                        st.write(f"**Status:** {'Ativo' if user['ativo'] else 'Inativo'}")
-                        st.write(f"**Data de Criação:** {user['data_criacao']}")
-                        st.write(f"**Criado por:** {user['criado_por_nome'] or 'Sistema'}")
-                    
-                    # Ações
-                    if 'editar' in st.session_state.permissions.get('usuarios', []):
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            if user['ativo']:
-                                if st.button("❌ Desativar", key=f"desativar_{user['id']}"):
-                                    # Implementar desativação
-                                    pass
-                            else:
-                                if st.button("✅ Ativar", key=f"ativar_{user['id']}"):
-                                    # Implementar ativação
-                                    pass
-                        
-                        with col2:
-                            if st.button("🔑 Resetar Senha", key=f"reset_{user['id']}"):
-                                # Implementar reset de senha
-                                pass
-        else:
-            st.info("Nenhum usuário encontrado.")
-    
-    with tab2:
-        st.markdown("### ➕ Cadastrar Novo Usuário")
-        
-        with st.form("form_usuario"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                nome_completo = st.text_input("Nome Completo *", placeholder="Nome completo do usuário")
-                username = st.text_input("Nome de Usuário *", placeholder="Username para login")
-                email = st.text_input("Email", placeholder="email@exemplo.com")
-                perfil = st.selectbox("Perfil *", ["", "Administrador", "Médico", "Farmacêutico", "Enfermeiro"])
-            
-            with col2:
-                password = st.text_input("Senha *", type="password", placeholder="Senha inicial")
-                confirm_password = st.text_input("Confirmar Senha *", type="password", placeholder="Confirme a senha")
-                crm_crf = st.text_input("CRM/CRF", placeholder="Número do registro profissional")
-            
-            submitted = st.form_submit_button("💾 Cadastrar Usuário", use_container_width=True)
-            
-            if submitted:
-                if not nome_completo or not username or not password or not perfil:
-                    st.error("❌ Preencha todos os campos obrigatórios!")
-                elif password != confirm_password:
-                    st.error("❌ As senhas não coincidem!")
-                elif len(password) < 6:
-                    st.error("❌ A senha deve ter pelo menos 6 caracteres!")
-                else:
-                    try:
-                        conn = st.session_state.db_manager.get_connection()
-                        cursor = conn.cursor()
-                        
-                        # Verificar se username já existe
-                        cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
-                        if cursor.fetchone():
-                            st.error("❌ Nome de usuário já existe!")
-                        else:
-                            password_hash = st.session_state.auth_manager.hash_password(password)
-                            
-                            cursor.execute("""
-                                INSERT INTO usuarios (
-                                    username, password_hash, nome_completo, email, perfil, crm_crf, criado_por
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                username, password_hash, nome_completo, email, perfil, crm_crf, st.session_state.user['id']
-                            ))
-                            
-                            conn.commit()
-                            conn.close()
-                            
-                            st.success("✅ Usuário cadastrado com sucesso!")
-                            time.sleep(2)
-                            st.rerun()
-                            
-                    except Exception as e:
-                        st.error(f"❌ Erro ao cadastrar usuário: {str(e)}")
-
-def show_relatorios():
-    """Módulo de relatórios"""
-    st.markdown("## 📊 Relatórios e Análises")
-    
-    # Verificar permissões
-    if 'relatorios' not in st.session_state.permissions:
-        st.error("❌ Você não tem permissão para acessar esta área!")
-        return
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "💊 Medicamentos", "👥 Pacientes", "📅 Consultas"])
-    
-    with tab1:
-        st.markdown("### 📊 Dashboard Executivo")
-        
-        conn = st.session_state.db_manager.get_connection()
-        
-        # Métricas principais
-        col1, col2, col3, col4 = st.columns(4)
-        
-        # Medicamentos cadastrados
-        total_medicamentos = pd.read_sql("SELECT COUNT(*) as count FROM medicamentos WHERE ativo = 1", conn).iloc[0]['count']
-        
-        # Pacientes ativos
-        total_pacientes = pd.read_sql("SELECT COUNT(*) as count FROM pacientes WHERE ativo = 1", conn).iloc[0]['count']
-        
-        # Consultas este mês
-        consultas_mes = pd.read_sql("""
-            SELECT COUNT(*) as count FROM consultas 
-            WHERE strftime('%Y-%m', data_consulta) = strftime('%Y-%m', 'now')
-            AND status != 'Cancelada'
-        """, conn).iloc[0]['count']
-        
-        # Receitas emitidas este mês
-        receitas_mes = pd.read_sql("""
-            SELECT COUNT(*) as count FROM receitas 
-            WHERE strftime('%Y-%m', data_emissao) = strftime('%Y-%m', 'now')
-        """, conn).iloc[0]['count']
-        
-        with col1:
-            st.metric("💊 Medicamentos", total_medicamentos)
-        with col2:
-            st.metric("👥 Pacientes", total_pacientes)
-        with col3:
-            st.metric("📅 Consultas (Mês)", consultas_mes)
-        with col4:
-            st.metric("📝 Receitas (Mês)", receitas_mes)
-        
-        st.markdown("---")
-        
-        # Gráficos
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 📈 Consultas por Mês (Últimos 6 meses)")
-            df_consultas_mes = pd.read_sql("""
-                SELECT 
-                    strftime('%Y-%m', data_consulta) as mes,
-                    COUNT(*) as quantidade
-                FROM consultas 
-                WHERE data_consulta >= DATE('now', '-6 months')
-                AND status != 'Cancelada'
-                GROUP BY strftime('%Y-%m', data_consulta)
-                ORDER BY mes
-            """, conn)
-            
-            if not df_consultas_mes.empty:
-                fig = px.line(df_consultas_mes, x='mes', y='quantidade', markers=True)
-                fig.update_layout(xaxis_title="Mês", yaxis_title="Quantidade")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Sem dados de consultas.")
-        
-        with col2:
-            st.markdown("### 🏥 Consultas por Médico (Este mês)")
-            df_consultas_medico = pd.read_sql("""
-                SELECT 
-                    u.nome_completo as medico,
-                    COUNT(*) as quantidade
-                FROM consultas c
-                JOIN usuarios u ON c.medico_id = u.id
-                WHERE strftime('%Y-%m', c.data_consulta) = strftime('%Y-%m', 'now')
-                AND c.status != 'Cancelada'
-                GROUP BY u.nome_completo
-                ORDER BY quantidade DESC
-                LIMIT 10
-            """, conn)
-            
-            if not df_consultas_medico.empty:
-                fig = px.bar(df_consultas_medico, x='quantidade', y='medico', orientation='h')
-                fig.update_layout(xaxis_title="Quantidade", yaxis_title="Médico")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Sem dados de consultas por médico.")
-        
-        conn.close()
-    
-    with tab2:
-        st.markdown("### 💊 Relatórios de Medicamentos")
-        
-        # Filtros
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            relatorio_tipo = st.selectbox("Tipo de Relatório", [
-                "Medicamentos por Categoria",
-                "Estoque Atual",
-                "Medicamentos Próximos ao Vencimento",
-                "Medicamentos Mais Prescritos"
-            ])
-        
-        conn = st.session_state.db_manager.get_connection()
-        
-        if relatorio_tipo == "Medicamentos por Categoria":
-            df_report = pd.read_sql("""
-                SELECT 
-                    categoria,
-                    COUNT(*) as quantidade,
-                    SUM(CASE WHEN controlado = 1 THEN 1 ELSE 0 END) as controlados
-                FROM medicamentos 
-                WHERE ativo = 1 AND categoria IS NOT NULL
-                GROUP BY categoria
-                ORDER BY quantidade DESC
-            """, conn)
-            
-            if not df_report.empty:
-                st.dataframe(df_report, use_container_width=True)
-                
-                fig = px.pie(df_report, values='quantidade', names='categoria', title="Distribuição por Categoria")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Nenhum dado encontrado.")
-        
-        elif relatorio_tipo == "Estoque Atual":
-            df_report = pd.read_sql("""
-                SELECT 
-                    m.nome as medicamento,
-                    m.categoria,
-                    l.numero_lote,
-                    l.quantidade_atual,
-                    l.data_validade,
-                    l.local_armazenamento
-                FROM lotes l
-                JOIN medicamentos m ON l.medicamento_id = m.id
-                WHERE l.ativo = 1 AND m.ativo = 1 AND l.quantidade_atual > 0
-                ORDER BY m.nome, l.data_validade
-            """, conn)
-            
-            if not df_report.empty:
-                st.dataframe(df_report, use_container_width=True)
-            else:
-                st.info("Nenhum estoque encontrado.")
-        
-        elif relatorio_tipo == "Medicamentos Próximos ao Vencimento":
-            df_report = pd.read_sql("""
-                SELECT 
-                    m.nome as medicamento,
-                    l.numero_lote,
-                    l.quantidade_atual,
-                    l.data_validade,
-                    julianday(l.data_validade) - julianday('now') as dias_para_vencer
-                FROM lotes l
-                JOIN medicamentos m ON l.medicamento_id = m.id
-                WHERE l.ativo = 1 AND m.ativo = 1 
-                AND l.quantidade_atual > 0
-                AND DATE(l.data_validade) <= DATE('now', '+60 days')
-                ORDER BY l.data_validade
-            """, conn)
-            
-            if not df_report.empty:
-                st.dataframe(df_report, use_container_width=True)
-            else:
-                st.info("Nenhum medicamento próximo ao vencimento.")
-        
-        elif relatorio_tipo == "Medicamentos Mais Prescritos":
-            df_report = pd.read_sql("""
-                SELECT 
-                    m.nome as medicamento,
-                    m.principio_ativo,
-                    COUNT(*) as vezes_prescrito,
-                    SUM(ri.quantidade) as quantidade_total
-                FROM receita_itens ri
-                JOIN medicamentos m ON ri.medicamento_id = m.id
-                JOIN receitas r ON ri.receita_id = r.id
-                WHERE r.data_emissao >= DATE('now', '-3 months')
-                GROUP BY m.id, m.nome, m.principio_ativo
-                ORDER BY vezes_prescrito DESC
-                LIMIT 20
-            """, conn)
-            
-            if not df_report.empty:
-                st.dataframe(df_report, use_container_width=True)
-                
-                fig = px.bar(df_report.head(10), x='vezes_prescrito', y='medicamento', orientation='h',
-                           title="Top 10 Medicamentos Mais Prescritos")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Nenhuma prescrição encontrada.")
-        
-        conn.close()
-    
-    with tab3:
-        st.markdown("### 👥 Relatórios de Pacientes")
-        
-        conn = st.session_state.db_manager.get_connection()
-        
-        # Estatísticas de pacientes
-        col1, col2, col3 = st.columns(3)
-        
-        # Total de pacientes
-        total_pacientes_rel = pd.read_sql("SELECT COUNT(*) as count FROM pacientes WHERE ativo = 1", conn).iloc[0]['count']
-        
-        # Pacientes por sexo
-        df_sexo = pd.read_sql("""
-            SELECT sexo, COUNT(*) as quantidade
-            FROM pacientes 
-            WHERE ativo = 1 AND sexo IS NOT NULL
-            GROUP BY sexo
-        """, conn)
-        
-        # Pacientes por idade
-        df_idade = pd.read_sql("""
-            SELECT 
-                CASE 
-                    WHEN (julianday('now') - julianday(data_nascimento))/365.25 < 18 THEN 'Menor de 18'
-                    WHEN (julianday('now') - julianday(data_nascimento))/365.25 < 65 THEN '18-64 anos'
-                    ELSE '65+ anos'
-                END as faixa_etaria,
-                COUNT(*) as quantidade
-            FROM pacientes 
-            WHERE ativo = 1 AND data_nascimento IS NOT NULL
-            GROUP BY faixa_etaria
-        """, conn)
-        
-        with col1:
-            st.metric("👥 Total de Pacientes", total_pacientes_rel)
-        
-        with col2:
-            if not df_sexo.empty:
-                fig_sexo = px.pie(df_sexo, values='quantidade', names='sexo', title="Distribuição por Sexo")
-                st.plotly_chart(fig_sexo, use_container_width=True)
-        
-        with col3:
-            if not df_idade.empty:
-                fig_idade = px.bar(df_idade, x='faixa_etaria', y='quantidade', title="Distribuição por Idade")
-                st.plotly_chart(fig_idade, use_container_width=True)
-        
-        conn.close()
     
     with tab4:
-        st.markdown("### 📅 Relatórios de Consultas")
+        st.markdown("### 🗺️ Mapa 3D do Estoque")
         
+        st.markdown("""
+        <div class="ai-analysis">
+            🗺️ <strong>Visualização Inteligente do Estoque</strong><br>
+            Mapa interativo mostrando a localização física de todos os medicamentos
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Buscar dados para o mapa
         conn = st.session_state.db_manager.get_connection()
-        
-        # Filtro de período
-        col1, col2 = st.columns(2)
-        with col1:
-            data_inicio_rel = st.date_input("Data Início", value=date.today() - timedelta(days=30))
-        with col2:
-            data_fim_rel = st.date_input("Data Fim", value=date.today())
-        
-        # Consultas por status
-        df_status = pd.read_sql("""
-            SELECT status, COUNT(*) as quantidade
-            FROM consultas 
-            WHERE DATE(data_consulta) BETWEEN ? AND ?
-            GROUP BY status
-        """, conn, params=[data_inicio_rel, data_fim_rel])
-        
-        if not df_status.empty:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig_status = px.pie(df_status, values='quantidade', names='status', title="Consultas por Status")
-                st.plotly_chart(fig_status, use_container_width=True)
-            
-            with col2:
-                # Consultas por dia
-                df_dia = pd.read_sql("""
-                    SELECT DATE(data_consulta) as data, COUNT(*) as quantidade
-                    FROM consultas 
-                    WHERE DATE(data_consulta) BETWEEN ? AND ?
-                    GROUP BY DATE(data_consulta)
-                    ORDER BY data
-                """, conn, params=[data_inicio_rel, data_fim_rel])
-                
-                if not df_dia.empty:
-                    fig_dia = px.line(df_dia, x='data', y='quantidade', title="Consultas por Dia", markers=True)
-                    st.plotly_chart(fig_dia, use_container_width=True)
-        
+        df_mapa = pd.read_sql("""
+            SELECT 
+                m.nome as medicamento,
+                l.local_armazenamento,
+                l.setor,
+                l.prateleira,
+                l.posicao,
+                l.quantidade_atual,
+                l.numero_lote,
+                CASE 
+                    WHEN l.quantidade_atual = 0 THEN 'Vazio'
+                    WHEN l.quantidade_atual <= 10 THEN 'Baixo'
+                    WHEN DATE(l.data_validade) <= DATE('now', '+30 days') THEN 'Vencendo'
+                    ELSE 'Normal'
+                END as status
+            FROM lotes l
+            JOIN medicamentos m ON l.medicamento_id = m.id
+            WHERE l.ativo = 1 AND l.local_armazenamento IS NOT NULL
+            ORDER BY l.local_armazenamento, l.setor, l.prateleira, l.posicao
+        """, conn)
         conn.close()
+        
+        if not df_mapa.empty:
+            # Agrupar por local
+            locais_unicos = df_mapa['local_armazenamento'].unique()
+            
+            for local in locais_unicos:
+                st.markdown(f"### 🏢 {local}")
+                
+                local_data = df_mapa[df_mapa['local_armazenamento'] == local]
+                
+                # Criar grid visual
+                setores = local_data['setor'].unique()
+                
+                if len(setores) > 1:
+                    cols = st.columns(len(setores))
+                    
+                    for i, setor in enumerate(setores):
+                        if pd.notna(setor):
+                            with cols[i]:
+                                st.markdown(f"**🏢 Setor {setor}**")
+                                
+                                setor_data = local_data[local_data['setor'] == setor]
+                                
+                                for _, item in setor_data.iterrows():
+                                    # Cor baseada no status
+                                    if item['status'] == 'Vazio':
+                                        cor = 'red'
+                                    elif item['status'] == 'Baixo':
+                                        cor = 'orange'
+                                    elif item['status'] == 'Vencendo':
+                                        cor = 'yellow'
+                                    else:
+                                        cor = 'green'
+                                    
+                                    st.markdown(f"""
+                                    <div style="background-color: {cor}; padding: 0.3rem; margin: 0.2rem; border-radius: 3px; color: white; font-size: 0.8rem;">
+                                        <strong>{item['medicamento'][:15]}...</strong><br>
+                                        📍 P{item['prateleira'] or '?'}-{item['posicao'] or '?'}<br>
+                                        📦 {item['quantidade_atual']} unidades
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                else:
+                    # Layout simples para local sem setores
+                    for _, item in local_data.iterrows():
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.write(f"**💊 {item['medicamento'][:20]}...**")
+                        with col2:
+                            st.write(f"📍 P{item['prateleira'] or '?'}-{item['posicao'] or '?'}")
+                        with col3:
+                            st.write(f"📦 {item['quantidade_atual']} un.")
+                        with col4:
+                            if item['status'] == 'Vazio':
+                                st.write("🔴 Vazio")
+                            elif item['status'] == 'Baixo':
+                                st.write("🟡 Baixo")
+                            elif item['status'] == 'Vencendo':
+                                st.write("⚠️ Vencendo")
+                            else:
+                                st.write("🟢 OK")
+                
+                st.markdown("---")
+        else:
+            st.info("Nenhum medicamento com localização definida.")
 
 def show_analise_preditiva():
-    """Módulo de análise preditiva"""
-    st.markdown("## 🔮 Análise Preditiva de Medicamentos")
+    """Módulo de análise preditiva avançado com IA"""
+    st.markdown("## 🔮 Análise Preditiva Inteligente")
     
     conn = st.session_state.db_manager.get_connection()
     
@@ -2038,31 +1473,80 @@ def show_analise_preditiva():
             m.id,
             m.nome as medicamento,
             m.principio_ativo,
+            m.categoria,
             SUM(l.quantidade_atual) as estoque_atual,
-            COUNT(DISTINCT mov.id) as total_movimentacoes
+            COUNT(DISTINCT mov.id) as total_movimentacoes,
+            AVG(CASE WHEN mov.tipo_movimento = 'Saída' THEN mov.quantidade ELSE 0 END) as consumo_medio,
+            MAX(mov.data_movimento) as ultima_movimentacao
         FROM medicamentos m
         JOIN lotes l ON m.id = l.medicamento_id
         LEFT JOIN movimentacoes mov ON l.id = mov.lote_id
         WHERE m.ativo = 1 AND l.ativo = 1 AND l.quantidade_atual > 0
-        GROUP BY m.id, m.nome, m.principio_ativo
+        GROUP BY m.id, m.nome, m.principio_ativo, m.categoria
         HAVING total_movimentacoes > 0
-        ORDER BY m.nome
+        ORDER BY consumo_medio DESC
     """
     
     df_medicamentos_pred = pd.read_sql(query, conn)
     
     if df_medicamentos_pred.empty:
-        st.info("Nenhum medicamento com histórico de movimentação encontrado.")
+        st.markdown("""
+        <div class="ai-analysis">
+            🤖 <strong>Sistema de Análise Preditiva</strong><br>
+            Para usar a análise preditiva, você precisa de dados de movimentação.<br>
+            📋 Cadastre medicamentos → 📦 Registre entradas → 📤 Registre saídas
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("### 💡 Como usar a análise preditiva:")
+        st.markdown("""
+        1. **Cadastre medicamentos** no sistema
+        2. **Registre entradas** de lotes no estoque  
+        3. **Registre saídas** (dispensações, receitas)
+        4. **Aguarde alguns dias** para acumular histórico
+        5. **Volte aqui** para ver as previsões inteligentes!
+        """)
         conn.close()
         return
     
-    # Seletor de medicamento
-    medicamento_options = {f"{row['medicamento']} (Estoque: {row['estoque_atual']})": row['id'] for _, row in df_medicamentos_pred.iterrows()}
-    medicamento_selecionado = st.selectbox("🔍 Selecione um medicamento para análise:", list(medicamento_options.keys()))
+    # Dashboard de análise preditiva
+    st.markdown("### 🤖 Dashboard Preditivo")
     
-    if medicamento_selecionado:
-        medicamento_id = medicamento_options[medicamento_selecionado]
-        
+    # Métricas gerais
+    total_medicamentos = len(df_medicamentos_pred)
+    medicamentos_criticos = len(df_medicamentos_pred[df_medicamentos_pred['estoque_atual'] <= 10])
+    medicamentos_sem_movimentacao = len(df_medicamentos_pred[df_medicamentos_pred['total_movimentacoes'] <= 2])
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("🔮 Medicamentos Analisados", total_medicamentos)
+    with col2:
+        st.metric("🔴 Estoque Crítico", medicamentos_criticos)
+    with col3:
+        st.metric("📊 Baixa Movimentação", medicamentos_sem_movimentacao)
+    with col4:
+        previsoes_urgentes = 0  # Calculado abaixo
+        st.metric("⚠️ Previsões Urgentes", previsoes_urgentes)
+    
+    # Análise individual por medicamento
+    st.markdown("### 🔍 Análise Detalhada por Medicamento")
+    
+    # Filtros
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        categoria_filter = st.selectbox("📂 Filtrar por Categoria", 
+            ["Todas"] + df_medicamentos_pred['categoria'].dropna().unique().tolist())
+    
+    with col2:
+        urgencia_filter = st.selectbox("⚠️ Filtrar por Urgência", 
+            ["Todas", "Crítico (< 7 dias)", "Atenção (< 15 dias)", "Normal (> 30 dias)"])
+    
+    # Processar cada medicamento
+    medicamentos_processados = []
+    
+    for _, med in df_medicamentos_pred.iterrows():
         # Calcular consumo médio dos últimos 30 dias
         query_consumo = """
             SELECT 
@@ -2077,184 +1561,361 @@ def show_analise_preditiva():
             ORDER BY data DESC
         """
         
-        df_consumo = pd.read_sql(query_consumo, conn, params=[medicamento_id])
+        df_consumo = pd.read_sql(query_consumo, conn, params=[med['id']])
         
         if not df_consumo.empty:
-            # Calcular métricas
             consumo_medio_diario = df_consumo['consumo_diario'].mean()
             consumo_total_30dias = df_consumo['consumo_diario'].sum()
-            estoque_atual = df_medicamentos_pred[df_medicamentos_pred['id'] == medicamento_id]['estoque_atual'].iloc[0]
             
-            # Previsões
-            dias_para_acabar = estoque_atual / consumo_medio_diario if consumo_medio_diario > 0 else float('inf')
-            data_previsao_fim = datetime.now() + timedelta(days=int(dias_para_acabar))
-            
-            # Exibir métricas
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("📦 Estoque Atual", f"{estoque_atual} unidades")
-            
-            with col2:
-                st.metric("📊 Consumo Médio Diário", f"{consumo_medio_diario:.1f} unidades")
-            
-            with col3:
-                st.metric("📅 Dias para Acabar", f"{int(dias_para_acabar)} dias" if dias_para_acabar != float('inf') else "∞")
-            
-            with col4:
-                if dias_para_acabar != float('inf'):
-                    st.metric("⚠️ Previsão de Fim", data_previsao_fim.strftime('%d/%m/%Y'))
-                else:
-                    st.metric("⚠️ Previsão de Fim", "Sem consumo")
-            
-            # Alertas
-            if dias_para_acabar < 7:
-                st.markdown("""
-                <div class="alert-danger">
-                    🚨 <strong>ALERTA CRÍTICO!</strong> Medicamento pode acabar em menos de 7 dias!
-                </div>
-                """, unsafe_allow_html=True)
-            elif dias_para_acabar < 15:
-                st.markdown("""
-                <div class="alert-warning">
-                    ⚠️ <strong>Atenção!</strong> Medicamento pode acabar em menos de 15 dias.
-                </div>
-                """, unsafe_allow_html=True)
-            elif dias_para_acabar < 30:
-                st.markdown("""
-                <div class="alert-success">
-                    ✅ <strong>OK!</strong> Estoque suficiente para os próximos 30 dias.
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Gráfico de consumo
-            if len(df_consumo) > 1:
-                st.markdown("### 📈 Histórico de Consumo (Últimos 30 dias)")
+            # Previsões inteligentes
+            if consumo_medio_diario > 0:
+                dias_para_acabar = med['estoque_atual'] / consumo_medio_diario
+                data_previsao_fim = datetime.now() + timedelta(days=int(dias_para_acabar))
                 
-                fig = px.line(df_consumo, x='data', y='consumo_diario', 
-                             title="Consumo Diário", markers=True)
-                fig.add_hline(y=consumo_medio_diario, line_dash="dash", 
-                             annotation_text=f"Média: {consumo_medio_diario:.1f}")
-                st.plotly_chart(fig, use_container_width=True)
+                # Classificar urgência
+                if dias_para_acabar < 7:
+                    urgencia = "Crítico"
+                    urgencia_cor = "🔴"
+                elif dias_para_acabar < 15:
+                    urgencia = "Atenção"
+                    urgencia_cor = "🟡"
+                elif dias_para_acabar < 30:
+                    urgencia = "Baixo"
+                    urgencia_cor = "🟠"
+                else:
+                    urgencia = "Normal"
+                    urgencia_cor = "🟢"
+                
+                # Sugestões inteligentes de IA
+                sugestoes = []
+                if dias_para_acabar < 15:
+                    quantidade_sugerida = consumo_medio_diario * 60  # 60 dias
+                    sugestoes.append(f"Repor {quantidade_sugerida:.0f} unidades para 60 dias")
+                
+                if consumo_medio_diario > med['estoque_atual'] / 30:
+                    sugestoes.append("Consumo acelerado detectado - monitorar de perto")
+                
+                if len(df_consumo) < 5:
+                    sugestoes.append("Poucos dados históricos - previsão pode ser imprecisa")
+                
+                # Análise de tendência
+                if len(df_consumo) >= 7:
+                    consumo_recente = df_consumo.head(7)['consumo_diario'].mean()
+                    consumo_anterior = df_consumo.tail(7)['consumo_diario'].mean()
+                    
+                    if consumo_recente > consumo_anterior * 1.2:
+                        sugestoes.append("Tendência de aumento no consumo")
+                    elif consumo_recente < consumo_anterior * 0.8:
+                        sugestoes.append("Tendência de redução no consumo")
+                
+                medicamentos_processados.append({
+                    'medicamento': med,
+                    'consumo_medio_diario': consumo_medio_diario,
+                    'dias_para_acabar': dias_para_acabar,
+                    'data_previsao_fim': data_previsao_fim,
+                    'urgencia': urgencia,
+                    'urgencia_cor': urgencia_cor,
+                    'sugestoes': sugestoes,
+                    'df_consumo': df_consumo
+                })
+    
+    # Aplicar filtros
+    medicamentos_filtrados = medicamentos_processados.copy()
+    
+    if categoria_filter != "Todas":
+        medicamentos_filtrados = [m for m in medicamentos_filtrados 
+                                if m['medicamento']['categoria'] == categoria_filter]
+    
+    if urgencia_filter != "Todas":
+        urgencia_map = {
+            "Crítico (< 7 dias)": "Crítico",
+            "Atenção (< 15 dias)": "Atenção", 
+            "Normal (> 30 dias)": "Normal"
+        }
+        urgencia_target = urgencia_map[urgencia_filter]
+        medicamentos_filtrados = [m for m in medicamentos_filtrados 
+                                if m['urgencia'] == urgencia_target]
+    
+    # Contar previsões urgentes
+    previsoes_urgentes = len([m for m in medicamentos_processados if m['urgencia'] in ["Crítico", "Atenção"]])
+    
+    # Exibir medicamentos processados
+    if medicamentos_filtrados:
+        for item in sorted(medicamentos_filtrados, key=lambda x: x['dias_para_acabar']):
+            med = item['medicamento']
             
-            # Sugestões de reposição
-            st.markdown("### 💡 Sugestões de Reposição")
+            st.markdown(f"""
+            <div class="medicamento-card">
+                <h4>{item['urgencia_cor']} {med['nome']} - {item['urgencia'].upper()}</h4>
+                <p><strong>Previsão:</strong> Acabará em {int(item['dias_para_acabar'])} dias ({item['data_previsao_fim'].strftime('%d/%m/%Y')})</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            if dias_para_acabar < 30:
-                quantidade_sugerida = consumo_medio_diario * 60  # 60 dias de estoque
-                st.info(f"📋 **Sugestão:** Repor {quantidade_sugerida:.0f} unidades para manter 60 dias de estoque.")
-            
-            # Tabela detalhada de consumo
-            st.markdown("### 📊 Detalhamento do Consumo")
-            st.dataframe(df_consumo.sort_values('data', ascending=False), use_container_width=True)
-            
-        else:
-            st.info("Não há histórico de consumo (saídas) para este medicamento nos últimos 30 dias.")
+            with st.expander("🔮 Ver Análise Completa"):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**📊 Métricas Atuais**")
+                    st.write(f"**Estoque Atual:** {med['estoque_atual']} unidades")
+                    st.write(f"**Consumo Médio:** {item['consumo_medio_diario']:.1f} unidades/dia")
+                    st.write(f"**Dias Restantes:** {int(item['dias_para_acabar'])} dias")
+                    st.write(f"**Categoria:** {med['categoria'] or 'N/A'}")
+                
+                with col2:
+                    st.markdown("**🎯 Previsão Inteligente**")
+                    st.write(f"**Data Prevista:** {item['data_previsao_fim'].strftime('%d/%m/%Y')}")
+                    st.write(f"**Urgência:** {item['urgencia']}")
+                    st.write(f"**Total Movimentações:** {med['total_movimentacoes']}")
+                    if med['ultima_movimentacao']:
+                        ultima = datetime.strptime(med['ultima_movimentacao'], '%Y-%m-%d %H:%M:%S')
+                        st.write(f"**Última Movimentação:** {ultima.strftime('%d/%m/%Y')}")
+                
+                with col3:
+                    st.markdown("**🤖 Sugestões da IA**")
+                    if item['sugestoes']:
+                        for sugestao in item['sugestoes']:
+                            st.write(f"• {sugestao}")
+                    else:
+                        st.write("• Estoque adequado")
+                        st.write("• Continuar monitoramento")
+                
+                # Alertas específicos
+                if item['urgencia'] == "Crítico":
+                    st.markdown(f"""
+                    <div class="alert-danger">
+                        🚨 <strong>AÇÃO URGENTE NECESSÁRIA!</strong><br>
+                        Este medicamento pode acabar em menos de 7 dias. Solicite reposição imediatamente.
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif item['urgencia'] == "Atenção":
+                    st.markdown(f"""
+                    <div class="alert-warning">
+                        ⚠️ <strong>Atenção Necessária!</strong><br>
+                        Este medicamento precisa de reposição em breve. Planeje a compra.
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Gráfico de consumo
+                if len(item['df_consumo']) > 1:
+                    st.markdown("**📈 Tendência de Consumo (30 dias)**")
+                    
+                    fig = px.line(item['df_consumo'], x='data', y='consumo_diario', 
+                                 title="Consumo Diário", markers=True)
+                    fig.add_hline(y=item['consumo_medio_diario'], line_dash="dash", 
+                                 annotation_text=f"Média: {item['consumo_medio_diario']:.1f}")
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Simulador de cenários
+                st.markdown("**🎲 Simulador de Cenários**")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    novo_consumo = st.slider("Consumo Diário Simulado", 
+                                           min_value=0.0, 
+                                           max_value=item['consumo_medio_diario'] * 3,
+                                           value=item['consumo_medio_diario'],
+                                           step=0.1,
+                                           key=f"sim_{med['id']}")
+                
+                with col2:
+                    if novo_consumo > 0:
+                        novos_dias = med['estoque_atual'] / novo_consumo
+                        nova_data = datetime.now() + timedelta(days=int(novos_dias))
+                        st.write(f"**Novo Cenário:**")
+                        st.write(f"Durará {int(novos_dias)} dias")
+                        st.write(f"Até {nova_data.strftime('%d/%m/%Y')}")
+    else:
+        st.info("Nenhum medicamento encontrado com os filtros aplicados.")
     
     conn.close()
 
-# Adicionar análise preditiva ao menu principal
-def show_main_app_updated():
-    """Aplicação principal atualizada com análise preditiva"""
-    
-    # Header com informações do usuário
-    st.markdown(f"""
-    <div class="main-header">
-        <h1>🏥 MedStock360 Advanced</h1>
-        <p>Sistema Hospitalar Completo Multi-usuário - v3.0</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Informações do usuário logado
-    user_info_col1, user_info_col2, user_info_col3 = st.columns([2, 1, 1])
-    
-    with user_info_col1:
-        st.markdown(f"""
-        <div class="user-info">
-            👤 <strong>{st.session_state.user['nome_completo']}</strong> | 
-            🎭 {st.session_state.user['perfil']} | 
-            📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with user_info_col3:
-        if st.button("🚪 Sair", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.user = None
-            st.session_state.permissions = None
-            st.rerun()
-    
-    # Menu lateral
-    with st.sidebar:
-        st.markdown("### 📋 Menu Principal")
+def create_smart_alert(tipo_alerta, prioridade, titulo, mensagem, paciente_id=None, medicamento_id=None, usuario_destinatario=None):
+    """Criar alerta inteligente"""
+    try:
+        conn = st.session_state.db_manager.get_connection()
+        cursor = conn.cursor()
         
-        # Opções baseadas nas permissões do usuário
-        menu_options = []
+        cursor.execute("""
+            INSERT INTO alertas_inteligentes (
+                tipo_alerta, prioridade, titulo, mensagem, paciente_id, 
+                medicamento_id, usuario_destinatario
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (tipo_alerta, prioridade, titulo, mensagem, paciente_id, medicamento_id, usuario_destinatario))
         
-        # Dashboard sempre disponível
-        menu_options.append("🏠 Dashboard")
-        
-        if 'medicamentos' in st.session_state.permissions:
-            menu_options.append("💊 Medicamentos")
-        
-        if 'estoque' in st.session_state.permissions:
-            menu_options.append("📦 Estoque")
-            menu_options.append("🔮 Análise Preditiva")  # Nova opção
-        
-        if 'pacientes' in st.session_state.permissions:
-            menu_options.append("👥 Pacientes")
-        
-        if 'consultas' in st.session_state.permissions:
-            menu_options.append("📅 Consultas")
-        
-        if 'receitas' in st.session_state.permissions:
-            menu_options.append("📝 Receitas")
-        
-        if 'usuarios' in st.session_state.permissions:
-            menu_options.append("👤 Usuários")
-        
-        if 'relatorios' in st.session_state.permissions:
-            menu_options.append("📊 Relatórios")
-        
-        selected_menu = st.selectbox("Selecione uma opção:", menu_options)
-    
-    # Roteamento das páginas
-    if selected_menu == "🏠 Dashboard":
-        show_dashboard()
-    elif selected_menu == "💊 Medicamentos":
-        show_medicamentos()
-    elif selected_menu == "📦 Estoque":
-        show_estoque()
-    elif selected_menu == "🔮 Análise Preditiva":
-        show_analise_preditiva()  # Nova função
-    elif selected_menu == "👥 Pacientes":
-        show_pacientes()
-    elif selected_menu == "📅 Consultas":
-        show_consultas()
-    elif selected_menu == "📝 Receitas":
-        show_receitas()
-    elif selected_menu == "👤 Usuários":
-        show_usuarios()
-    elif selected_menu == "📊 Relatórios":
-        show_relatorios()
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Erro ao criar alerta: {e}")
 
-# Atualizar função principal para usar a versão atualizada
-def main():
-    """Função principal da aplicação"""
+def show_pacientes():
+    """Módulo de pacientes com IA"""
+    st.markdown("## 👥 Gestão Inteligente de Pacientes")
     
-    # Inicializar gerenciadores
-    if 'db_manager' not in st.session_state:
-        st.session_state.db_manager = DatabaseManager()
-        st.session_state.auth_manager = AuthManager(st.session_state.db_manager)
-    
-    # Verificar autenticação
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    
-    if not st.session_state.authenticated:
-        show_login_page()
+    # Verificar permissões
+    if 'criar' in st.session_state.permissions.get('pacientes', []):
+        tab1, tab2, tab3 = st.tabs(["📋 Lista de Pacientes", "➕ Cadastrar Paciente", "🤖 Insights de IA"])
     else:
-        show_main_app_updated()  # Usar versão atualizada
-
-if __name__ == "__main__":
-    main()
+        tab1, tab2, tab3 = st.tabs(["📋 Lista de Pacientes", "", "🤖 Insights de IA"])
+    
+    with tab1:
+        st.markdown("### 📋 Pacientes com Informações Inteligentes")
+        
+        # Filtros avançados
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            search_term = st.text_input("🔍 Buscar paciente", placeholder="Nome ou CPF")
+        
+        with col2:
+            conn = st.session_state.db_manager.get_connection()
+            planos = pd.read_sql("SELECT DISTINCT plano_saude FROM pacientes WHERE plano_saude IS NOT NULL", conn)['plano_saude'].tolist()
+            plano_filter = st.selectbox("🏥 Plano de Saúde", ["Todos"] + planos)
+        
+        with col3:
+            idade_filter = st.selectbox("👶 Faixa Etária", ["Todas", "Criança (0-12)", "Adolescente (13-17)", "Adulto (18-64)", "Idoso (65+)"])
+        
+        # Buscar pacientes com estatísticas
+        query = """
+            SELECT 
+                p.*,
+                u.nome_completo as cadastrado_por_nome,
+                COUNT(DISTINCT c.id) as total_consultas,
+                COUNT(DISTINCT r.id) as total_receitas,
+                COUNT(DISTINCT pr.id) as total_prontuario,
+                MAX(c.data_consulta) as ultima_consulta
+            FROM pacientes p
+            LEFT JOIN usuarios u ON p.cadastrado_por = u.id
+            LEFT JOIN consultas c ON p.id = c.paciente_id
+            LEFT JOIN receitas r ON p.id = r.paciente_id
+            LEFT JOIN prontuario pr ON p.id = pr.paciente_id
+            WHERE p.ativo = 1
+        """
+        params = []
+        
+        if search_term:
+            query += " AND (p.nome_completo LIKE ? OR p.cpf LIKE ?)"
+            params.extend([f"%{search_term}%", f"%{search_term}%"])
+        
+        if plano_filter != "Todos":
+            query += " AND p.plano_saude = ?"
+            params.append(plano_filter)
+        
+        query += " GROUP BY p.id ORDER BY p.nome_completo"
+        
+        df_pacientes = pd.read_sql(query, conn, params=params)
+        
+        # Aplicar filtro de idade
+        if idade_filter != "Todas" and not df_pacientes.empty:
+            hoje = datetime.now().date()
+            df_pacientes_filtrados = []
+            
+            for _, pac in df_pacientes.iterrows():
+                if pac['data_nascimento']:
+                    nascimento = datetime.strptime(pac['data_nascimento'], '%Y-%m-%d').date()
+                    idade = (hoje - nascimento).days // 365
+                    
+                    incluir = False
+                    if idade_filter == "Criança (0-12)" and idade <= 12:
+                        incluir = True
+                    elif idade_filter == "Adolescente (13-17)" and 13 <= idade <= 17:
+                        incluir = True
+                    elif idade_filter == "Adulto (18-64)" and 18 <= idade <= 64:
+                        incluir = True
+                    elif idade_filter == "Idoso (65+)" and idade >= 65:
+                        incluir = True
+                    
+                    if incluir:
+                        df_pacientes_filtrados.append(pac)
+            
+            df_pacientes = pd.DataFrame(df_pacientes_filtrados)
+        
+        conn.close()
+        
+        if not df_pacientes.empty:
+            # Estatísticas gerais
+            total_pacientes = len(df_pacientes)
+            pacientes_ativos = len(df_pacientes[df_pacientes['total_consultas'] > 0])
+            pacientes_cronicos = len(df_pacientes[df_pacientes['medicamentos_uso_continuo'].notna()])
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("👥 Total de Pacientes", total_pacientes)
+            with col2:
+                st.metric("🏥 Pacientes Ativos", pacientes_ativos)
+            with col3:
+                st.metric("💊 Uso Contínuo", pacientes_cronicos)
+            
+            # Lista inteligente de pacientes
+            for _, pac in df_pacientes.iterrows():
+                # Calcular idade
+                idade = "N/A"
+                if pac['data_nascimento']:
+                    nascimento = datetime.strptime(pac['data_nascimento'], '%Y-%m-%d').date()
+                    idade = (datetime.now().date() - nascimento).days // 365
+                
+                # Status do paciente
+                if pac['total_consultas'] == 0:
+                    status_icon = "🆕"
+                    status_text = "Novo"
+                elif pac['ultima_consulta']:
+                    ultima = datetime.strptime(pac['ultima_consulta'], '%Y-%m-%d %H:%M:%S')
+                    dias_ultima = (datetime.now() - ultima).days
+                    if dias_ultima > 90:
+                        status_icon = "😴"
+                        status_text = "Inativo"
+                    else:
+                        status_icon = "✅"
+                        status_text = "Ativo"
+                else:
+                    status_icon = "📋"
+                    status_text = "Pendente"
+                
+                # Card do paciente
+                with st.expander(f"{status_icon} {pac['nome_completo']} ({idade} anos) - {status_text}"):
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.markdown("**👤 Dados Pessoais**")
+                        st.write(f"**Nome:** {pac['nome_completo']}")
+                        st.write(f"**CPF:** {pac['cpf'] or 'N/A'}")
+                        st.write(f"**Idade:** {idade} anos")
+                        st.write(f"**Sexo:** {pac['sexo'] or 'N/A'}")
+                        st.write(f"**Telefone:** {pac['telefone'] or 'N/A'}")
+                    
+                    with col2:
+                        st.markdown("**🏥 Informações Médicas**")
+                        st.write(f"**Consultas:** {pac['total_consultas']}")
+                        st.write(f"**Receitas:** {pac['total_receitas']}")
+                        st.write(f"**Prontuário:** {pac['total_prontuario']} entradas")
+                        if pac['ultima_consulta']:
+                            ultima = datetime.strptime(pac['ultima_consulta'], '%Y-%m-%d %H:%M:%S')
+                            st.write(f"**Última Consulta:** {ultima.strftime('%d/%m/%Y')}")
+                    
+                    with col3:
+                        st.markdown("**🏠 Contato e Plano**")
+                        st.write(f"**Email:** {pac['email'] or 'N/A'}")
+                        st.write(f"**Cidade:** {pac['cidade'] or 'N/A'}")
+                        st.write(f"**Plano:** {pac['plano_saude'] or 'N/A'}")
+                        st.write(f"**Emergência:** {pac['contato_emergencia'] or 'N/A'}")
+                    
+                    with col4:
+                        st.markdown("**⚕️ Condições Especiais**")
+                        if pac['alergias']:
+                            st.write(f"**🚨 Alergias:** {pac['alergias']}")
+                        if pac['medicamentos_uso_continuo']:
+                            st.write(f"**💊 Uso Contínuo:** {pac['medicamentos_uso_continuo']}")
+                        if pac['historico_familiar']:
+                            st.write(f"**👨‍👩‍👧‍👦 Histórico Familiar:** {pac['historico_familiar']}")
+                    
+                    # Insights de IA
+                    insights = []
+                    if idade != "N/A" and idade >= 65:
+                        insights.append("👴 Paciente idoso - considerar cuidados especiais")
+                    if pac['medicamentos_uso_continuo']:
+                        insights.append("💊 Uso contínuo de medicamentos - verificar interações")
+                    if pac['total_consultas'] > 10:
+                        insights.append("🏥 Paciente frequente - considerar plano de cuidados")
+                    if pac['alergias']:
+                        insights.append("🚨 Paciente com alergias conhecidas")
+                    
+                    if insights
