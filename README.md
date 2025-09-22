@@ -1,308 +1,295 @@
-[readme_medstock.md](https://github.com/user-attachments/files/22436823/readme_medstock.md)
-# 🏥 MedStock360 Advanced
+# 🏥 MedStock360 Advanced - Sistema de Controle de Medicamentos
 
-## Sistema Hospitalar Completo Multi-usuário
+## 📋 Sobre o Sistema
 
-### 📋 Descrição
+O **MedStock360 Advanced** é um sistema completo de gestão hospitalar focado no controle inteligente de medicamentos, estoque e atendimento a pacientes. O sistema oferece:
 
-O **MedStock360** é um sistema completo de gestão hospitalar que oferece controle de medicamentos, estoque, pacientes, consultas e receitas médicas. Desenvolvido para ser simples de usar, mas poderoso em funcionalidades.
+- 💊 **Gestão Completa de Medicamentos** - Cadastro com informações farmacêuticas detalhadas
+- 📦 **Controle de Estoque Inteligente** - Sistema de lotes com localização física 3D
+- 🔮 **Análise Preditiva com IA** - Previsões de consumo e alertas inteligentes
+- 👥 **Gestão de Pacientes** - Prontuário eletrônico integrado
+- 🏥 **Sistema de Consultas** - Agendamento e controle de atendimentos
+- 📋 **Receitas Médicas** - Prescrição eletrônica com controle de dispensação
+- 📈 **Relatórios Avançados** - Análises estatísticas e exportação de dados
+- 👤 **Multi-usuário** - Sistema de permissões por perfis (Admin, Médico, Operador)
 
----
+## 🚀 Instalação e Configuração
 
-## ✨ Funcionalidades Principais
+### Pré-requisitos
 
-### 🔐 **Sistema de Usuários**
-- ✅ Login seguro com diferentes perfis
-- ✅ Perfis: Administrador, Médico, Farmacêutico, Enfermeiro
-- ✅ Permissões específicas por perfil
-- ✅ Multi-usuário simultâneo
-
-### 💊 **Gestão de Medicamentos**
-- ✅ Cadastro completo de medicamentos
-- ✅ Controle de princípio ativo, fabricante, categoria
-- ✅ Informações de apresentação (comprimido, xarope, etc.)
-- ✅ Via de administração (oral, intramuscular, etc.)
-- ✅ Medicamentos controlados
-- ✅ Registro ANVISA
-
-### 📦 **Controle de Estoque Inteligente**
-- ✅ Gestão por lotes com validade
-- ✅ Controle de localização física
-- ✅ Alertas automáticos de estoque baixo
-- ✅ Alertas de medicamentos próximos ao vencimento
-- ✅ **🔮 Análise Preditiva de Consumo**
-- ✅ Histórico completo de movimentações
-
-### 🔮 **Análise Preditiva (NOVO!)**
-- ✅ Previsão de quando medicamentos vão acabar
-- ✅ Cálculo baseado no consumo histórico
-- ✅ Sugestões automáticas de reposição
-- ✅ Alertas inteligentes por prioridade
-- ✅ Gráficos de consumo em tempo real
-
-### 👥 **Gestão de Pacientes**
-- ✅ Cadastro completo de pacientes
-- ✅ Histórico médico
-- ✅ Informações de convênio
-- ✅ Contatos de emergência
-
-### 📅 **Agendamento de Consultas**
-- ✅ Agenda por médico
-- ✅ Controle de status das consultas
-- ✅ Histórico de consultas
-- ✅ Integração com receitas
-
-### 📝 **Receitas Médicas Digitais**
-- ✅ Prescrição eletrônica
-- ✅ Controle de medicamentos prescritos
-- ✅ Dosagem e instruções de uso
-- ✅ Histórico de receitas por paciente
-
-### 📊 **Relatórios e Dashboard**
-- ✅ Dashboard executivo com gráficos
-- ✅ Relatórios de medicamentos
-- ✅ Relatórios de estoque
-- ✅ Relatórios de pacientes e consultas
-- ✅ Exportação de dados
-
----
-
-## 🚀 Como Instalar e Usar
-
-### 📋 **Pré-requisitos**
 - Python 3.8 ou superior
-- Computador com Windows, Mac ou Linux
+- pip (gerenciador de pacotes Python)
 
-### 💻 **Instalação Simples**
+### 1. Instalação das Dependências
 
-1. **Baixe o projeto:**
-   ```bash
-   git clone https://github.com/SEU_USUARIO/medstock360.git
-   cd medstock360
-   ```
+```bash
+pip install streamlit pandas sqlite3 plotly hashlib json pathlib datetime uuid
+```
 
-2. **Instale as dependências:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Estrutura de Arquivos
 
-3. **Execute o sistema:**
-   ```bash
-   streamlit run app.py
-   ```
-
-4. **Acesse no navegador:**
-   - Abra: `http://localhost:8501`
-
-### 🔑 **Primeiro Acesso**
-- **Usuário:** `admin`
-- **Senha:** `admin123`
-
-**⚠️ IMPORTANTE:** Mude a senha padrão após o primeiro login!
-
----
-
-## 👥 **Perfis de Usuário**
-
-### 👑 **Administrador**
-- Acesso total ao sistema
-- Gerencia usuários
-- Relatórios completos
-- Configurações do sistema
-
-### 👨‍⚕️ **Médico**
-- Gestão de pacientes
-- Agendamento de consultas
-- Prescrição de receitas
-- Consulta de medicamentos
-
-### 💊 **Farmacêutico**
-- Gestão de medicamentos
-- Controle de estoque
-- Dispensação de medicamentos
-- Relatórios farmacêuticos
-
-### 👩‍⚕️ **Enfermeiro**
-- Consulta de pacientes
-- Visualização de receitas
-- Consulta de estoque
-- Suporte às consultas
-
----
-
-## 📁 **Estrutura de Arquivos**
+Crie uma pasta para o projeto e adicione os seguintes arquivos:
 
 ```
 medstock360/
-│
-├── app.py                 # Aplicação principal
-├── requirements.txt       # Dependências
-├── README.md             # Este arquivo
-│
-├── data/                 # Banco de dados (criado automaticamente)
-│   └── medstock360.db
-│
-├── logs/                 # Logs do sistema (criado automaticamente)
-│
-└── backups/              # Backups automáticos (criado automaticamente)
+├── app.py              # Arquivo principal (código fornecido)
+├── README.md           # Este arquivo
+└── medstock360.db      # Banco de dados (criado automaticamente)
 ```
 
----
+### 3. Executar o Sistema
 
-## 🔧 **Configurações Importantes**
+```bash
+# Navegar para a pasta do projeto
+cd medstock360
 
-### 📊 **Análise Preditiva**
-O sistema calcula automaticamente:
-- **Consumo médio diário** baseado nos últimos 30 dias
-- **Previsão de término** do estoque atual
-- **Alertas inteligentes:**
-  - 🚨 Crítico: menos de 7 dias
-  - ⚠️ Atenção: menos de 15 dias
-  - ✅ OK: mais de 30 dias
+# Executar o aplicativo
+streamlit run app.py
+```
 
-### 🔄 **Backup Automático**
-- Backup automático a cada 6 horas
-- Arquivos salvos na pasta `backups/`
-- Retenção de 30 dias de backups
+O sistema abrirá automaticamente no navegador em `http://localhost:8501`
 
----
+## 🔐 Acesso Inicial
 
-## 🎯 **Como Usar Cada Módulo**
+### Usuário Padrão
 
-### 1️⃣ **Cadastrar Medicamentos**
-1. Acesse "💊 Medicamentos"
-2. Clique em "➕ Cadastrar Medicamento"
-3. Preencha todas as informações
-4. Salve
+- **Usuário:** `admin`
+- **Senha:** `admin123`
+- **Perfil:** Administrador (acesso total)
 
-### 2️⃣ **Controlar Estoque**
-1. Acesse "📦 Estoque"
-2. Para nova entrada: "➕ Entrada de Lote"
-3. Monitore alertas automáticos
-4. Use "🔮 Análise Preditiva" para previsões
+### Primeiro Uso
 
-### 3️⃣ **Cadastrar Pacientes**
-1. Acesse "👥 Pacientes"
-2. Clique em "➕ Cadastrar Paciente"
-3. Complete todos os dados
-4. Salve
+1. Acesse com o usuário admin
+2. Vá em **👤 Usuários** → **➕ Cadastrar Usuário** 
+3. Crie usuários específicos para sua equipe
+4. Configure as permissões adequadas para cada perfil
 
-### 4️⃣ **Agendar Consultas**
-1. Acesse "📅 Consultas"
-2. Clique em "➕ Agendar Consulta"
-3. Selecione paciente e médico
-4. Defina data/hora
+## 👥 Perfis de Usuário
 
-### 5️⃣ **Prescrever Receitas**
-1. Acesse "📝 Receitas"
-2. Clique em "➕ Nova Receita"
-3. Selecione paciente
-4. Adicione medicamentos com dosagem
-5. Salve a receita
+### 👑 Administrador
+- Acesso total ao sistema
+- Gerenciamento de usuários
+- Configurações avançadas
+- Relatórios completos
 
----
+### 👨‍⚕️ Médico
+- Gestão de pacientes
+- Agendamento de consultas
+- Prescrição de receitas
+- Acesso ao prontuário
+- Visualização de medicamentos
 
-## 📈 **Alertas Automáticos**
+### 👤 Operador
+- Controle de estoque
+- Movimentações de medicamentos
+- Cadastro básico de pacientes
+- Relatórios básicos
 
-### 🔴 **Estoque Crítico**
-- Medicamentos com quantidade ≤ 10 unidades
-- Aparecem no dashboard principal
+## 📊 Funcionalidades Principais
 
-### ⚠️ **Próximo ao Vencimento**
-- Medicamentos que vencem em 30 dias
-- Alertas visuais em todas as telas
+### 💊 Gestão de Medicamentos
 
-### 🔮 **Previsão de Término**
-- Baseada no consumo histórico
-- Cálculo automático diário
+**Cadastro Completo:**
+- Nome comercial e princípio ativo
+- Categoria farmacológica
+- Forma farmacêutica e concentração
+- Via de administração
+- Informações sobre tarja e controle
+- Necessidade de refrigeração
+- Dados do fabricante
+
+**Recursos Avançados:**
+- Código de barras
+- Alertas para medicamentos controlados
+- Classificação por categorias
+- Busca inteligente
+
+### 📦 Controle de Estoque
+
+**Sistema de Lotes:**
+- Números de lote únicos
+- Datas de fabricação e validade
+- Controle de quantidades (inicial/atual)
+- Preços unitários e fornecedores
+
+**Localização Física 3D:**
+- Local de armazenamento
+- Setor específico
+- Prateleira numerada
+- Posição exata
+- Mapa visual interativo
+
+**Alertas Inteligentes:**
+- Medicamentos próximos ao vencimento (30 dias)
+- Estoque baixo (≤ 10 unidades)
+- Medicamentos sem estoque
 - Sugestões de reposição
 
+### 🔮 Análise Preditiva
+
+**IA Integrada:**
+- Análise de padrões de consumo
+- Previsão de quando medicamentos irão acabar
+- Sugestões inteligentes de reposição
+- Identificação de tendências
+
+**Cenários Simulados:**
+- Simulador de diferentes taxas de consumo
+- Projeções para 30, 60, 90 dias
+- Alertas por urgência (Crítico, Atenção, Normal)
+
+### 👥 Gestão de Pacientes
+
+**Dados Completos:**
+- Informações pessoais e contato
+- Dados médicos e alergias
+- Medicamentos de uso contínuo
+- Histórico familiar
+- Plano de saúde
+
+**Insights Automáticos:**
+- Identificação de pacientes idosos
+- Alertas para alergias conhecidas
+- Sugestões baseadas no histórico
+
+### 🏥 Sistema de Consultas
+
+**Agendamento:**
+- Data e hora específicas
+- Associação paciente-médico
+- Motivo da consulta
+- Valor da consulta
+
+**Controle de Status:**
+- Agendada
+- Realizada
+- Cancelada
+
+### 📋 Receitas Médicas
+
+**Prescrição Eletrônica:**
+- Múltiplos medicamentos por receita
+- Posologia detalhada
+- Observações médicas
+- Controle de validade
+
+**Dispensação Controlada:**
+- Rastreamento de medicamentos dispensados
+- Histórico completo
+- Integração com estoque
+
+### 📈 Relatórios e Análises
+
+**Relatórios Padrão:**
+- Movimentações de estoque
+- Análise de validades
+- Consumo por medicamento
+- Desempenho por fornecedor
+
+**Exportação de Dados:**
+- Formato CSV
+- Arquivos ZIP com múltiplas tabelas
+- Backup completo do sistema
+
+## 🛠️ Configurações Avançadas
+
+### Backup Automático
+- Geração de backups do banco de dados
+- Download de arquivos de backup
+- Restauração de dados
+
+### Segurança
+- Senhas criptografadas (SHA-256)
+- Sistema de permissões granular
+- Logs de acesso por usuário
+- Reset seguro de senhas
+
+### Personalização
+- Configuração de alertas
+- Personalização de relatórios
+- Ajuste de parâmetros de IA
+
+## 📱 Interface do Usuário
+
+### Design Responsivo
+- Layout otimizado para desktop e tablet
+- Sidebar com navegação intuitiva
+- Cards informativos com métricas
+- Gráficos interativos
+
+### Recursos Visuais
+- Código de cores para status (Verde, Amarelo, Vermelho)
+- Ícones intuitivos para cada funcionalidade
+- Alertas visuais destacados
+- Mapa 3D do estoque
+
+## 🔧 Solução de Problemas
+
+### Erro de Dependências
+```bash
+# Atualizar pip
+pip install --upgrade pip
+
+# Instalar dependências individualmente
+pip install streamlit
+pip install pandas
+pip install plotly
+```
+
+### Erro de Banco de Dados
+- O banco SQLite é criado automaticamente
+- Se houver problemas, delete o arquivo `medstock360.db`
+- O sistema recriará com dados padrão
+
+### Performance
+- Para grandes volumes de dados, considere usar PostgreSQL
+- Otimize consultas SQL se necessário
+- Configure cache para relatórios pesados
+
+## 📞 Suporte e Manutenção
+
+### Atualizações
+- Backup regular dos dados
+- Teste em ambiente de desenvolvimento
+- Documentação de mudanças
+
+### Monitoramento
+- Logs de erro do Streamlit
+- Monitoramento de uso de recursos
+- Verificação de integridade dos dados
+
+## 🎯 Roadmap de Melhorias
+
+### Próximas Versões
+- [ ] Integração com APIs de laboratórios
+- [ ] Módulo financeiro completo
+- [ ] App mobile complementar
+- [ ] Dashboard em tempo real
+- [ ] Integração com equipamentos IoT
+- [ ] Relatórios com Business Intelligence
+- [ ] Sistema de notificações push
+- [ ] Auditoria completa de ações
+
+### Integrações Futuras
+- [ ] Sistema de código de barras/QR Code
+- [ ] Integração com ANVISA
+- [ ] Conectividade com sistemas hospitalares (HIS)
+- [ ] API REST para terceiros
+
+## 📄 Licença
+
+Este sistema foi desenvolvido para uso em ambiente hospitalar e farmacêutico.
+
+## 🤝 Contribuições
+
+Para melhorias e sugestões:
+1. Documente bugs encontrados
+2. Sugira novas funcionalidades
+3. Teste em diferentes cenários
+4. Forneça feedback da experiência do usuário
+
 ---
 
-## 🛠️ **Solução de Problemas**
+**MedStock360 Advanced** - Transformando a gestão hospitalar com tecnologia e inteligência artificial.
 
-### ❓ **Não consegue fazer login?**
-- Verifique usuário e senha
-- Use credenciais padrão: `admin` / `admin123`
-
-### ❓ **Sistema lento?**
-- Feche abas desnecessárias do navegador
-- Reinicie o aplicativo
-
-### ❓ **Erro ao instalar?**
-- Verifique se o Python está instalado
-- Execute: `pip install --upgrade pip`
-- Tente novamente: `pip install -r requirements.txt`
-
-### ❓ **Perdeu dados?**
-- Verifique a pasta `backups/`
-- Restaure backup mais recente
-
----
-
-## 📞 **Suporte**
-
-### 🔧 **Problemas Técnicos**
-1. Verifique a seção "Solução de Problemas"
-2. Consulte os logs na pasta `logs/`
-3. Abra uma issue no GitHub
-
-### 💡 **Sugestões de Melhorias**
-- Abra uma issue no GitHub com suas ideias
-- Descreva detalhadamente a funcionalidade
-
----
-
-## 📄 **Licença**
-
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
-
----
-
-## 🎉 **Versão Atual: 3.0**
-
-### ✨ **Novidades da v3.0:**
-- 🔮 **Análise Preditiva de Medicamentos**
-- 📊 **Dashboard melhorado com gráficos interativos**
-- 🎯 **Alertas inteligentes por prioridade**
-- 👥 **Sistema multi-usuário robusto**
-- 📱 **Interface responsiva**
-- 🔒 **Segurança aprimorada**
-
-### 🗓️ **Próximas Atualizações (v3.1):**
-- 📱 Notificações push
-- 📧 Envio de alertas por email
-- 📊 Relatórios em PDF
-- 🔗 Integração com sistemas externos
-- 📱 App mobile
-
----
-
-## 🌟 **Contribua!**
-
-Ajude a melhorar o MedStock360:
-1. Faça um Fork do projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Abra um Pull Request
-
----
-
-**Desenvolvido com ❤️ para facilitar a gestão hospitalar!**
-
----
-
-### 📸 **Screenshots**
-
-*Dashboard Principal:*
-![Dashboard](screenshots/dashboard.png)
-
-*Análise Preditiva:*
-![Análise Preditiva](screenshots/analise-preditiva.png)
-
-*Gestão de Medicamentos:*
-![Medicamentos](screenshots/medicamentos.png)
-
----
-
-**MedStock360 - Transformando a gestão hospitalar! 🏥✨**
+*Versão 3.0 - Sistema Completo de Gestão Hospitalar*
